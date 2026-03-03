@@ -97,7 +97,7 @@ export default function Home() {
   const fetchAll = async (currentUser?: any) => {
     const uid = (currentUser ?? user)?.id ?? null;
     const [{ data: aData }, { data: cData }, { data: lData }, { data: pData }] = await Promise.all([
-      supabase.from("assumptions").select("*").order("created_at", { ascending: false }),
+      supabase.from("assumptions").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("comments").select("*").order("created_at", { ascending: true }),
       supabase.from("likes").select("assumption_id,user_id"),
       supabase.from("profiles").select("username,display_name,avatar_url,avatar_color,is_verified"),
@@ -310,6 +310,11 @@ export default function Home() {
     fetchAll(user);
   };
 
+  const pinPost = async (id: string, pinned: boolean) => {
+    await supabase.from("assumptions").update({ pinned: !pinned }).eq("id", id);
+    fetchAll(user);
+  };
+
   const deleteComment = async (id: string) => {
     await supabase.from("comments").delete().eq("id", id);
     fetchAll(user);
@@ -389,6 +394,10 @@ export default function Home() {
         .act.lk.on{color:var(--red);}
         .act.lk.on svg{fill:var(--red);stroke:var(--red);}
         .act.del:hover{color:var(--red);background:var(--red-ring);}
+        .act.pin:hover{color:#8a6a3a;background:rgba(138,106,58,0.1);}
+        .act.pin.on{color:#8a6a3a;}
+        .act.pin.on svg{fill:#8a6a3a;stroke:#8a6a3a;}
+        .pin-banner{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#8a6a3a;letter-spacing:0.04em;text-transform:uppercase;padding:6px 20px 0;background:var(--surface);}
         .thread-line{width:2px;flex:1;min-height:14px;background:var(--border);margin:6px auto 0;border-radius:1px;}
         .comments-area{border-bottom:1px solid var(--border2);background:var(--bg2);}
         .comment-root{border-bottom:1px solid var(--border2);}
@@ -507,7 +516,7 @@ export default function Home() {
           <TweetCard key={a.id} a={a}
             comments={comments.filter(c => c.assumption_id === a.id)}
             isAdmin={isAdmin} profile={profile}
-            onLike={likePost} onDelete={deletePost}
+            onLike={likePost} onDelete={deletePost} onPin={pinPost}
             onDeleteComment={deleteComment} onAddComment={addComment} />
         ))}
       </div>
@@ -710,26 +719,40 @@ function CharRing({ count, max }: { count: number; max: number }) {
 }
 
 /* ─── Tweet card ─── */
-function TweetCard({ a, comments, isAdmin, profile, onLike, onDelete, onDeleteComment, onAddComment }: any) {
+function TweetCard({ a, comments, isAdmin, profile, onLike, onDelete, onPin, onDeleteComment, onAddComment }: any) {
   const [open, setOpen] = useState(false);
   const roots = comments.filter((c: Comment) => !c.parent_id);
   return (
     <div>
+      {a.pinned && (
+        <div className="pin-banner">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="#8a6a3a" stroke="none"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+          Post in evidenza
+        </div>
+      )}
       <div className="tweet-row" onClick={() => setOpen(o => !o)}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <a href={`/${a.username}`} onClick={e => e.stopPropagation()}>
+          {a.username !== "anonimo" ? (
+            <a href={`/${a.username}`} onClick={e => e.stopPropagation()}>
+              <UAv username={a.username} size={42} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
+            </a>
+          ) : (
             <UAv username={a.username} size={42} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
-          </a>
+          )}
           {open && comments.length > 0 && <div className="thread-line" />}
         </div>
         <div className="tweet-col" onClick={e => e.stopPropagation()}>
           <div className="tweet-meta">
-            <a href={`/${a.username}`} style={{ fontWeight:600, fontSize:14, color:"var(--text)", textDecoration:"none" }}
-              onClick={e => e.stopPropagation()}
-              onMouseEnter={e => (e.currentTarget.style.textDecoration="underline")}
-              onMouseLeave={e => (e.currentTarget.style.textDecoration="none")}>
-              {displayFor(a.username, a.display_name)}
-            </a>
+            {a.username !== "anonimo" ? (
+              <a href={`/${a.username}`} style={{ fontWeight:600, fontSize:14, color:"var(--text)", textDecoration:"none" }}
+                onClick={e => e.stopPropagation()}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration="underline")}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration="none")}>
+                {displayFor(a.username, a.display_name)}
+              </a>
+            ) : (
+              <span style={{ fontWeight:600, fontSize:14, color:"var(--text)" }}>{displayFor(a.username, a.display_name)}</span>
+            )}
             {a.is_verified && <Badge size={15} />}
             <span className="tw-handle">@{handleFor(a.username)}</span>
             <span className="tw-dot">·</span>
@@ -746,9 +769,14 @@ function TweetCard({ a, comments, isAdmin, profile, onLike, onDelete, onDeleteCo
               {a.likes > 0 && <span>{a.likes}</span>}
             </button>
             {isAdmin && (
-              <button className="act del" onClick={() => onDelete(a.id)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-              </button>
+              <>
+                <button className={`act pin${a.pinned ? " on" : ""}`} onClick={() => onPin(a.id, a.pinned)} title={a.pinned ? "Rimuovi pin" : "Pinna"}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+                </button>
+                <button className="act del" onClick={() => onDelete(a.id)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -780,16 +808,24 @@ function CommentNode({ comment: c, allComments, isAdmin, profile, assumptionId, 
   return (
     <div className="comment-root">
       <div className="comment-item">
-        <a href={`/${c.username}`}>
+        {c.username !== "anonimo" ? (
+          <a href={`/${c.username}`}>
+            <UAv username={c.username} size={32} avatarUrl={c.avatar_url} avatarColor={c.avatar_color} />
+          </a>
+        ) : (
           <UAv username={c.username} size={32} avatarUrl={c.avatar_url} avatarColor={c.avatar_color} />
-        </a>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <a href={`/${c.username}`} style={{ fontWeight:600, fontSize:13, color:"var(--text)", textDecoration:"none" }}
-              onMouseEnter={e => (e.currentTarget.style.textDecoration="underline")}
-              onMouseLeave={e => (e.currentTarget.style.textDecoration="none")}>
-              {displayFor(c.username, c.display_name)}
-            </a>
+            {c.username !== "anonimo" ? (
+              <a href={`/${c.username}`} style={{ fontWeight:600, fontSize:13, color:"var(--text)", textDecoration:"none" }}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration="underline")}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration="none")}>
+                {displayFor(c.username, c.display_name)}
+              </a>
+            ) : (
+              <span style={{ fontWeight:600, fontSize:13, color:"var(--text)" }}>{displayFor(c.username, c.display_name)}</span>
+            )}
             {c.is_verified && <Badge size={13} />}
             <span className="c-time">· {fmt(c.created_at)}</span>
           </div>
