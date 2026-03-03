@@ -240,20 +240,24 @@ export default function Home() {
     if (!user) return;
     setDeleteLoading(true);
     try {
-      // cancella dati utente
+      // 1. cancella tutti i dati dal db
       await Promise.all([
         supabase.from("likes").delete().eq("user_id", user.id),
         supabase.from("comments").delete().eq("username", profile?.username ?? ""),
         supabase.from("assumptions").delete().eq("username", profile?.username ?? ""),
         supabase.from("profiles").delete().eq("id", user.id),
       ]);
-      // cancella avatar storage
+
+      // 2. cancella avatar storage
       if (profile?.avatar_url) {
-        const path = `${user.id}/avatar`;
-        await supabase.storage.from("avatars").remove([path + ".jpg", path + ".jpeg", path + ".png", path + ".webp"]);
+        const ext = profile.avatar_url.split(".").pop()?.split("?")[0] ?? "jpg";
+        await supabase.storage.from("avatars").remove([`${user.id}/avatar.${ext}`]);
       }
-      // cancella auth user via edge function
-      await supabase.functions.invoke("delete-user", { body: { user_id: user.id } });
+
+      // 3. cancella utente auth — funziona se hai abilitato "Allow users to delete their own account"
+      const { error } = await supabase.rpc("delete_user");
+      if (error) console.error("Errore cancellazione auth:", error);
+
       await supabase.auth.signOut();
       setModal("none");
     } catch (e) {

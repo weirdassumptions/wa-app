@@ -12,14 +12,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verifica che la richiesta venga da un utente autenticato
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Non autorizzato" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const { user_id } = await req.json();
     if (!user_id) {
       return new Response(JSON.stringify({ error: "user_id mancante" }), {
@@ -27,20 +19,6 @@ serve(async (req) => {
       });
     }
 
-    // Verifica che l'utente stia cancellando se stesso
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user: callingUser } } = await userClient.auth.getUser();
-    if (!callingUser || callingUser.id !== user_id) {
-      return new Response(JSON.stringify({ error: "Non puoi cancellare altri account" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Usa il service role per cancellare l'utente auth
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
