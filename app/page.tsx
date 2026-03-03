@@ -642,7 +642,7 @@ function TweetCard({ a, comments, isAdmin, onLike, onDelete, onDeleteComment, on
               )}
             </div>
           ))}
-          <ReplyBox assumptionId={a.id} addComment={onAddComment} targetUsername={a.username} />
+          <ReplyBox assumptionId={a.id} addComment={onAddComment} targetUsername={a.username} isAdmin={isAdmin} />
         </div>
       )}
     </div>
@@ -650,27 +650,64 @@ function TweetCard({ a, comments, isAdmin, onLike, onDelete, onDeleteComment, on
 }
 
 /* ─── Reply box ─── */
-function ReplyBox({ assumptionId, addComment, targetUsername }: { assumptionId: string; addComment: (id: string, t: string, u: string) => void; targetUsername: string }) {
+function ReplyBox({ assumptionId, addComment, targetUsername, isAdmin }: {
+  assumptionId: string;
+  addComment: (id: string, t: string, u: string) => void;
+  targetUsername: string;
+  isAdmin: boolean;
+}) {
   const [t, setT] = useState("");
   const [u, setU] = useState("");
-  const submit = () => { if (!t.trim()) return; addComment(assumptionId, t, u); setT(""); setU(""); };
+  const [asOfficial, setAsOfficial] = useState(false);
+
+  const submit = () => {
+    if (!t.trim()) return;
+    addComment(assumptionId, t, asOfficial ? OFFICIAL_NAME : u);
+    setT("");
+    if (!asOfficial) setU("");
+  };
+
+  const avatarEl = asOfficial
+    ? <img src={OFFICIAL_LOGO} alt="WA" style={{ width:34, height:34, borderRadius:"50%", objectFit:"cover", border:"2px solid var(--red)", flexShrink:0 }} />
+    : <div className="av" style={{ width:34, height:34, background: u ? avatarGrad(u) : "#c8bfb0", fontSize:13, flexShrink:0 }}>{u ? initial(u) : "?"}</div>;
 
   return (
-    <div className="reply-box">
-      <div className="av" style={{ width:34, height:34, background: u ? avatarGrad(u) : "#c8bfb0", fontSize:13 }}>
-        {u ? initial(u) : "?"}
+    <div className="reply-box" style={{ flexDirection:"column", gap:8, alignItems:"stretch" }}>
+      {isAdmin && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, paddingBottom:6, borderBottom:"1px solid var(--border2)", cursor:"pointer" }}
+          onClick={() => setAsOfficial(v => !v)}>
+          <img src={OFFICIAL_LOGO} alt="WA" style={{ width:18, height:18, borderRadius:"50%", objectFit:"cover", border:"1px solid var(--red)" }} />
+          <span style={{ fontSize:12, fontWeight:600, color: asOfficial ? "var(--red)" : "var(--muted)", flex:1, transition:"color 0.15s" }}>
+            {asOfficial ? `Commenti come ${OFFICIAL_NAME}` : "Commenta come account ufficiale"}
+          </span>
+          <div className={"tog-track" + (asOfficial ? " on" : "")} style={{ width:30, height:17 }}>
+            <div className="tog-thumb" style={{ width:11, height:11, top:3, left:3 }} />
+          </div>
+        </div>
+      )}
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        {avatarEl}
+        <div className="reply-col">
+          {asOfficial ? (
+            <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", display:"flex", alignItems:"center", gap:5, paddingBottom:3 }}>
+              {OFFICIAL_NAME}
+              <span className="badge-official" style={{ width:13, height:13 }}>
+                <svg viewBox="0 0 10 10" fill="none"><path d="M2 5.5L4 7.5L8 3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </span>
+            </div>
+          ) : (
+            <input className="reply-name" placeholder="username" value={u} onChange={e => setU(e.target.value)} />
+          )}
+          <input
+            className="reply-inp"
+            placeholder={"Rispondi a " + targetUsername + "…"}
+            value={t}
+            onChange={e => setT(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && submit()}
+          />
+        </div>
+        <button className="reply-send" onClick={submit}>Rispondi</button>
       </div>
-      <div className="reply-col">
-        <input className="reply-name" placeholder="username" value={u} onChange={e => setU(e.target.value)} />
-        <input
-          className="reply-inp"
-          placeholder={`Rispondi a ${targetUsername}…`}
-          value={t}
-          onChange={e => setT(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && submit()}
-        />
-      </div>
-      <button className="reply-send" onClick={submit}>Rispondi</button>
     </div>
   );
 }
