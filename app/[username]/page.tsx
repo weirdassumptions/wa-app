@@ -31,6 +31,16 @@ export default function ProfilePage() {
   const [myProfile, setMyProfile] = useState<Profile | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  /* ── dark mode (sincronizzata con home) ── */
+  const [dark, setDark] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("theme") === "dark";
+    return false;
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
+
   /* ── fetch sessione ── */
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -53,7 +63,6 @@ export default function ProfilePage() {
   const fetchProfileData = async () => {
     setLoading(true);
 
-    /* 1. profilo */
     const { data: prof } = await supabase
       .from("profiles")
       .select("*")
@@ -63,7 +72,6 @@ export default function ProfilePage() {
     if (!prof) { setNotFound(true); setLoading(false); return; }
     setPageProfile(prof);
 
-    /* 2. post + likes + commenti */
     const uid = user?.id ?? null;
     const [{ data: aData }, { data: cData }, { data: lData }] = await Promise.all([
       supabase.from("assumptions").select("*").eq("username", username).order("created_at", { ascending: false }),
@@ -89,9 +97,7 @@ export default function ProfilePage() {
       };
     }));
 
-    /* filtra i commenti relativi ai post di questo utente */
     setComments((cData ?? []).filter((c: any) => postIds.includes(c.assumption_id)));
-
     setLoading(false);
   };
 
@@ -143,7 +149,7 @@ export default function ProfilePage() {
     <>
       <GlobalStyles />
       <div className="wrap">
-        <BackBar onBack={() => router.push("/")} />
+        <BackBar onBack={() => router.push("/")} dark={dark} onToggleDark={() => setDark(d => !d)} />
         <div className="empty">
           <div className="empty-icon">👤</div>
           <div className="empty-title">Profilo non trovato</div>
@@ -155,19 +161,20 @@ export default function ProfilePage() {
     </>
   );
 
-  const isOwnProfile = myProfile?.username === pageProfile?.username;
-
   return (
     <>
       <GlobalStyles />
       <div className="wrap">
 
-        {/* ── top bar ── */}
-        <BackBar onBack={() => router.push("/")} label={displayFor(pageProfile!.username, pageProfile!.display_name)} />
+        <BackBar
+          onBack={() => router.push("/")}
+          label={displayFor(pageProfile!.username, pageProfile!.display_name)}
+          dark={dark}
+          onToggleDark={() => setDark(d => !d)}
+        />
 
         {/* ── hero profilo ── */}
         <div className="profile-hero">
-          {/* copertina decorativa */}
           <div
             className="profile-cover"
             style={{
@@ -176,8 +183,6 @@ export default function ProfilePage() {
                 : avatarGrad(pageProfile!.username),
             }}
           />
-
-          {/* avatar grande */}
           <div className="profile-av-wrap">
             <div style={{ border: "3px solid var(--surface)", borderRadius: "50%", display: "inline-block" }}>
               <UAv
@@ -188,7 +193,6 @@ export default function ProfilePage() {
               />
             </div>
           </div>
-
           <div className="profile-info">
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span className="profile-name">
@@ -201,8 +205,6 @@ export default function ProfilePage() {
             {pageProfile!.bio && (
               <div className="profile-bio">{pageProfile!.bio}</div>
             )}
-
-            {/* stats */}
             <div className="profile-stats">
               <div className="profile-stat">
                 <span className="stat-n">{assumptions.length}</span>
@@ -226,15 +228,11 @@ export default function ProfilePage() {
             </div>
           ) : assumptions.map(a => (
             <TweetCard
-              key={a.id}
-              a={a}
+              key={a.id} a={a}
               comments={comments.filter(c => c.assumption_id === a.id)}
-              isAdmin={isAdmin}
-              profile={myProfile}
-              onLike={likePost}
-              onDelete={deletePost}
-              onDeleteComment={deleteComment}
-              onAddComment={addComment}
+              isAdmin={isAdmin} profile={myProfile}
+              onLike={likePost} onDelete={deletePost}
+              onDeleteComment={deleteComment} onAddComment={addComment}
             />
           ))}
         </div>
@@ -244,7 +242,7 @@ export default function ProfilePage() {
 }
 
 /* ─── Back bar ─── */
-function BackBar({ onBack, label }: { onBack: () => void; label?: string }) {
+function BackBar({ onBack, label, dark, onToggleDark }: { onBack: () => void; label?: string; dark: boolean; onToggleDark: () => void }) {
   return (
     <div className="x-header">
       <button
@@ -263,20 +261,33 @@ function BackBar({ onBack, label }: { onBack: () => void; label?: string }) {
           <div className="header-sub">Profilo</div>
         </div>
       )}
-      <img
-        src={OFFICIAL_LOGO}
-        alt="WA"
-        className="header-logo"
-        width={32}
-        height={32}
-        style={{ marginLeft: "auto", cursor: "pointer" }}
-        onClick={() => window.location.href = "/"}
-      />
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        <button
+          onClick={onToggleDark}
+          title={dark ? "Modalità chiara" : "Modalità scura"}
+          style={{ background: "none", border: "1px solid var(--border)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex", alignItems: "center", color: "var(--muted)", transition: "border-color 0.15s,color 0.15s" }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--red)"; e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--muted)"; }}>
+          {dark
+            ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          }
+        </button>
+        <img
+          src={OFFICIAL_LOGO}
+          alt="WA"
+          className="header-logo"
+          width={32}
+          height={32}
+          style={{ cursor: "pointer" }}
+          onClick={() => window.location.href = "/"}
+        />
+      </div>
     </div>
   );
 }
 
-/* ─── Tweet card (identico alla home) ─── */
+/* ─── Tweet card ─── */
 function TweetCard({ a, comments, isAdmin, profile, onLike, onDelete, onDeleteComment, onAddComment }: any) {
   const [open, setOpen] = useState(false);
   const roots = comments.filter((c: Comment) => !c.parent_id);
@@ -354,16 +365,24 @@ function CommentNode({ comment: c, allComments, isAdmin, profile, assumptionId, 
   return (
     <div className="comment-root">
       <div className="comment-item">
-        <a href={`/${c.username}`}>
+        {c.username !== "anonimo" ? (
+          <a href={`/${c.username}`}>
+            <UAv username={c.username} size={32} avatarUrl={c.avatar_url} avatarColor={c.avatar_color} />
+          </a>
+        ) : (
           <UAv username={c.username} size={32} avatarUrl={c.avatar_url} avatarColor={c.avatar_color} />
-        </a>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <a href={`/${c.username}`} style={{ fontWeight: 600, fontSize: 13, color: "var(--text)", textDecoration: "none" }}
-              onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
-              onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}>
-              {displayFor(c.username, c.display_name)}
-            </a>
+            {c.username !== "anonimo" ? (
+              <a href={`/${c.username}`} style={{ fontWeight: 600, fontSize: 13, color: "var(--text)", textDecoration: "none" }}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}>
+                {displayFor(c.username, c.display_name)}
+              </a>
+            ) : (
+              <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text)" }}>{displayFor(c.username, c.display_name)}</span>
+            )}
             {c.is_verified && <Badge size={13} />}
             <span className="c-time">· {fmt(c.created_at)}</span>
           </div>
@@ -401,7 +420,7 @@ function CommentNode({ comment: c, allComments, isAdmin, profile, assumptionId, 
   );
 }
 
-/* ─── CSS globale (stesso della home) ─── */
+/* ─── CSS globale ─── */
 function GlobalStyles() {
   return (
     <style>{`
@@ -412,6 +431,15 @@ function GlobalStyles() {
         --text:#1a1510; --muted:#8a7f72; --muted2:#b0a898;
         --red:#b83232; --red-h:#9c2020; --red-pale:#f5ebe8; --red-ring:rgba(184,50,50,0.12);
       }
+      [data-theme="dark"] {
+        --bg:#0f0d0b; --bg2:#1a1510; --surface:#141210;
+        --border:#2e2820; --border2:#241f18;
+        --text:#f0e8dc; --muted:#7a7060; --muted2:#4a4438;
+        --red:#c84040; --red-h:#b83232; --red-pale:#1e1210; --red-ring:rgba(200,64,64,0.15);
+      }
+      [data-theme="dark"] .x-header{background:rgba(20,18,16,0.92);}
+      [data-theme="dark"] .tweet-row:hover{background:#1a1510;}
+      [data-theme="dark"] .comment-item:hover{background:rgba(30,25,20,0.7);}
       *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
       body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;}
       .wrap{min-height:100vh;max-width:600px;margin:0 auto;background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border);}
@@ -422,8 +450,6 @@ function GlobalStyles() {
       .header-sub{font-size:12px;color:var(--muted);margin-top:1px;}
       .admin-pill{background:var(--red-pale);border:1px solid rgba(184,50,50,0.3);border-radius:999px;color:var(--red);font-size:10px;font-weight:600;letter-spacing:0.1em;padding:3px 10px;text-transform:uppercase;}
       .av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0;}
-
-      /* ── hero profilo ── */
       .profile-hero{position:relative;background:var(--surface);}
       .profile-cover{height:100px;width:100%;}
       .profile-av-wrap{position:absolute;top:54px;left:20px;}
@@ -437,13 +463,10 @@ function GlobalStyles() {
       .stat-l{font-size:13px;color:var(--muted);}
       .badge-official{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--red);flex-shrink:0;}
       .badge-official svg{width:60%;height:60%;}
-
-      /* ── tweet ── */
       .tweet-row{display:flex;gap:14px;padding:16px 20px 0;border-bottom:1px solid var(--border2);cursor:pointer;transition:background 0.12s;background:var(--surface);}
       .tweet-row:hover{background:#faf5ee;}
       .tweet-col{flex:1;min-width:0;padding-bottom:14px;}
       .tweet-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:4px;}
-      .tw-name{font-weight:600;font-size:14px;color:var(--text);}
       .tw-handle{font-size:13px;color:var(--muted);}
       .tw-dot{color:var(--muted2);}
       .tw-time{font-size:13px;color:var(--muted);}
@@ -459,15 +482,12 @@ function GlobalStyles() {
       .act.lk.on svg{fill:var(--red);stroke:var(--red);}
       .act.del:hover{color:var(--red);background:var(--red-ring);}
       .thread-line{width:2px;flex:1;min-height:14px;background:var(--border);margin:6px auto 0;border-radius:1px;}
-
-      /* ── commenti ── */
       .comments-area{border-bottom:1px solid var(--border2);background:var(--bg2);}
       .comment-root{border-bottom:1px solid var(--border2);}
       .comment-root:last-of-type{border-bottom:none;}
       .comment-item{display:flex;gap:10px;padding:12px 20px;transition:background 0.12s;}
       .comment-item:hover{background:rgba(245,240,232,0.7);}
       .comment-children{padding-left:20px;border-left:2px solid var(--border2);margin-left:36px;}
-      .c-name{font-weight:600;font-size:13px;color:var(--text);}
       .c-time{font-size:12px;color:var(--muted);}
       .c-body{font-size:14px;color:var(--text);line-height:1.55;margin-top:2px;}
       .c-reply-btn{background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);font-family:inherit;padding:3px 0;margin-top:4px;transition:color 0.15s;}
@@ -478,7 +498,6 @@ function GlobalStyles() {
       .reply-inp::placeholder{color:var(--muted2);font-style:italic;}
       .reply-send{background:var(--red);border:none;border-radius:999px;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:7px 18px;white-space:nowrap;flex-shrink:0;transition:background 0.15s;}
       .reply-send:hover{background:var(--red-h);}
-
       .empty{padding:72px 20px;text-align:center;color:var(--muted);font-family:'DM Sans',sans-serif;}
       .empty-icon{font-size:40px;margin-bottom:14px;}
       .empty-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:6px;}

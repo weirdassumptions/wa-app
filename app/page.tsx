@@ -93,6 +93,16 @@ export default function Home() {
   const fileRef    = useRef<HTMLInputElement>(null);
   const regFileRef = useRef<HTMLInputElement>(null);
 
+  /* ── dark mode ── */
+  const [dark, setDark] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("theme") === "dark";
+    return false;
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
+
   /* ── fetch feed ── */
   const fetchAll = async (currentUser?: any) => {
     const uid = (currentUser ?? user)?.id ?? null;
@@ -346,6 +356,18 @@ export default function Home() {
           --text:#1a1510; --muted:#8a7f72; --muted2:#b0a898;
           --red:#b83232; --red-h:#9c2020; --red-pale:#f5ebe8; --red-ring:rgba(184,50,50,0.12);
         }
+        [data-theme="dark"] {
+          --bg:#0f0d0b; --bg2:#1a1510; --surface:#141210;
+          --border:#2e2820; --border2:#241f18;
+          --text:#f0e8dc; --muted:#7a7060; --muted2:#4a4438;
+          --red:#c84040; --red-h:#b83232; --red-pale:#1e1210; --red-ring:rgba(200,64,64,0.15);
+        }
+        [data-theme="dark"] .x-header{background:rgba(20,18,16,0.92);}
+        [data-theme="dark"] .tweet-row:hover{background:#1a1510;}
+        [data-theme="dark"] .comment-item:hover{background:rgba(30,25,20,0.7);}
+        [data-theme="dark"] .modal{background:#1a1510;}
+        [data-theme="dark"] .f-inp{background:#0f0d0b;}
+        [data-theme="dark"] .overlay{background:rgba(0,0,0,0.7);}
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;}
         .wrap{min-height:100vh;max-width:600px;margin:0 auto;background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border);}
@@ -451,6 +473,18 @@ export default function Home() {
           </div>
           {isAdmin && <span className="admin-pill">Admin</span>}
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={() => setDark(d => !d)}
+              title={dark ? "Modalità chiara" : "Modalità scura"}
+              style={{ background: "none", border: "1px solid var(--border)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex", alignItems: "center", color: "var(--muted)", transition: "border-color 0.15s,color 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--red)"; e.currentTarget.style.color = "var(--text)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--muted)"; }}>
+              {dark
+                ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              }
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {user && profile ? (
               <>
                 <button className="user-btn" onClick={() => {
@@ -473,6 +507,7 @@ export default function Home() {
             ) : (
               <button className="login-btn" onClick={() => openAuth("login")}>Accedi</button>
             )}
+            </div>
           </div>
         </div>
 
