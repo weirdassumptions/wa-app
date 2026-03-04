@@ -3,65 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
-
-/* ─── Types ─── */
-type Profile = {
-  id: string; username: string; display_name: string; bio: string;
-  avatar_color: string; avatar_url?: string; is_admin?: boolean; is_verified?: boolean;
-};
-type Comment = {
-  id: string; text: string; username: string; display_name?: string; is_verified?: boolean;
-  assumption_id: string; created_at: string; parent_id: string | null;
-  avatar_url?: string; avatar_color?: string;
-};
-
-/* ─── Constants ─── */
-const OFFICIAL_USERNAME = "wa";
-const OFFICIAL_NAME     = "Weird Assumptions";
-const OFFICIAL_HANDLE   = "weirdassumptions";
-const OFFICIAL_LOGO     = "/logo.jpeg";
-const AVATAR_COLORS     = ["#b83232","#d4603a","#7a6a5a","#4a7a6a","#7a5a8a","#8a6a3a","#4a6a8a","#6a4a7a"];
-
-/* ─── Helpers ─── */
-const GRADS = [
-  ["#b83232","#d4603a"],["#7a6a5a","#a08870"],["#4a7a6a","#6a9e8a"],
-  ["#7a5a8a","#a07ab0"],["#8a6a3a","#b08a50"],["#4a6a8a","#6a8aaa"],
-];
-const avatarGrad = (n: string) => { const [a,b] = GRADS[n.charCodeAt(0) % GRADS.length]; return `linear-gradient(135deg,${a},${b})`; };
-const initial    = (n: string) => n.charAt(0).toUpperCase();
-const isOfficial = (u: string) => u === OFFICIAL_USERNAME;
-const displayFor = (username: string, display_name?: string) =>
-  isOfficial(username) ? OFFICIAL_NAME : (display_name || username);
-const handleFor  = (username: string) =>
-  isOfficial(username) ? OFFICIAL_HANDLE : username.toLowerCase().replace(/\s+/g,"_");
-const fmt = (d: string) => {
-  const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
-  if (s < 60) return `${s}s fa`;
-  if (s < 3600) return `${Math.floor(s/60)}m fa`;
-  if (s < 86400) return `${Math.floor(s/3600)}h fa`;
-  return new Date(d).toLocaleDateString("it-IT");
-};
-
-const Badge = ({ size = 16 }: { size?: number }) => (
-  <span className="badge-official" style={{ width: size, height: size }}>
-    <svg viewBox="0 0 10 10" fill="none">
-      <path d="M2 5.5L4 7.5L8 3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  </span>
-);
-
-function Avatar({ profile, size = 42 }: { profile: Profile | null; size?: number }) {
-  if (!profile) return <div className="av" style={{ width: size, height: size, background: "#c8bfb0", fontSize: size*0.38 }}>?</div>;
-  if (isOfficial(profile.username)) return <img src={OFFICIAL_LOGO} alt="WA" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--red)", flexShrink: 0 }} />;
-  if (profile.avatar_url) return <img src={profile.avatar_url} alt={profile.username} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
-  return <div className="av" style={{ width: size, height: size, background: profile.avatar_color, fontSize: size*0.38 }}>{initial(profile.display_name || profile.username)}</div>;
-}
-
-function UAv({ username, size = 42, avatarUrl, avatarColor }: { username: string; size?: number; avatarUrl?: string; avatarColor?: string }) {
-  if (isOfficial(username)) return <img src={OFFICIAL_LOGO} alt="WA" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--red)", flexShrink: 0 }} />;
-  if (avatarUrl) return <img src={avatarUrl} alt={username} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
-  return <div className="av" style={{ width: size, height: size, background: avatarColor || avatarGrad(username), fontSize: size*0.35 }}>{initial(username)}</div>;
-}
+import { TweetCard, Avatar, UAv, Badge, displayFor, handleFor, fmt, isOfficial, useTick, OFFICIAL_LOGO, OFFICIAL_USERNAME, AVATAR_COLORS, avatarGrad, initial, type Profile, type Comment } from "./components/tweet-card";
 
 /* ════════════════════════════════════════════ */
 export default function Home() {
@@ -93,15 +35,22 @@ export default function Home() {
   const fileRef    = useRef<HTMLInputElement>(null);
   const regFileRef = useRef<HTMLInputElement>(null);
 
+  /* ── mobile menu ── */
+  const [menuOpen, setMenuOpen] = useState(false);
+
   /* ── dark mode ── */
-  const [dark, setDark] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("theme") === "dark";
-    return false;
-  });
+  const [dark, setDark] = useState(false);
+  const [darkReady, setDarkReady] = useState(false);
   useEffect(() => {
+    const saved = localStorage.getItem("theme") === "dark";
+    setDark(saved);
+    setDarkReady(true);
+  }, []);
+  useEffect(() => {
+    if (!darkReady) return;
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
     localStorage.setItem("theme", dark ? "dark" : "light");
-  }, [dark]);
+  }, [dark, darkReady]);
 
   /* ── fetch feed ── */
   const fetchAll = async (currentUser?: any) => {
@@ -330,6 +279,16 @@ export default function Home() {
     fetchAll(user);
   };
 
+  const editPost = async (id: string, newText: string) => {
+    await supabase.from("assumptions").update({ text: newText, edited: true }).eq("id", id);
+    fetchAll(user);
+  };
+
+  const editComment = async (id: string, newText: string) => {
+    await supabase.from("comments").update({ text: newText, edited: true }).eq("id", id);
+    fetchAll(user);
+  };
+
   const addComment = async (aid: string, t: string, parentId: string | null = null) => {
     if (!t.trim()) return;
     const poster = profile ? (isOfficial(profile.username) ? OFFICIAL_USERNAME : profile.username) : "anonimo";
@@ -363,6 +322,8 @@ export default function Home() {
           --red:#c84040; --red-h:#b83232; --red-pale:#1e1210; --red-ring:rgba(200,64,64,0.15);
         }
         [data-theme="dark"] .x-header{background:rgba(20,18,16,0.92);}
+        [data-theme="dark"] .sidebar{background:var(--bg);}
+        [data-theme="dark"] .right-col{background:var(--bg);}
         [data-theme="dark"] .tweet-row:hover{background:#1a1510;}
         [data-theme="dark"] .comment-item:hover{background:rgba(30,25,20,0.7);}
         [data-theme="dark"] .modal{background:#1a1510;}
@@ -370,17 +331,53 @@ export default function Home() {
         [data-theme="dark"] .overlay{background:rgba(0,0,0,0.7);}
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;}
-        .wrap{min-height:100vh;max-width:600px;margin:0 auto;background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border);}
-        .x-header{position:sticky;top:0;z-index:50;background:rgba(253,250,245,0.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 20px;height:56px;display:flex;align-items:center;gap:14px;}
+        /* ── layout desktop ── */
+        .page-layout{display:grid;grid-template-columns:240px minmax(0,600px) 1fr;min-height:100vh;max-width:1200px;margin:0 auto;}
+        .sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;padding:20px 16px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--border);}
+        .sidebar-logo{display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:20px;cursor:pointer;border-radius:12px;transition:background 0.15s;text-decoration:none;}
+        .sidebar-logo:hover{background:var(--bg2);}
+        .sidebar-logo img{border-radius:8px;border:1.5px solid var(--border);flex-shrink:0;}
+        .sidebar-logo-text{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;line-height:1.2;color:var(--text);}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;cursor:pointer;font-size:15px;font-weight:500;color:var(--text);text-decoration:none;transition:background 0.15s;border:none;background:none;font-family:inherit;width:100%;}
+        .nav-item:hover{background:var(--bg2);}
+        .nav-item svg{width:22px;height:22px;flex-shrink:0;}
+        .nav-item.active{font-weight:700;}
+        .sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:4px;padding-top:12px;border-top:1px solid var(--border2);}
+        .sidebar-user{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;cursor:pointer;transition:background 0.15s;text-decoration:none;}
+        .sidebar-user:hover{background:var(--bg2);}
+        .sidebar-user-info{flex:1;min-width:0;}
+        .sidebar-user-name{font-size:14px;font-weight:600;color:var(--text);}
+        .sidebar-user-handle{font-size:12px;color:var(--muted);}
+        .right-col{padding:20px 20px;}
+        .right-widget{background:var(--bg2);border-radius:16px;padding:16px;margin-bottom:16px;}
+        .right-widget-title{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;margin-bottom:10px;color:var(--text);}
+
+        /* ── feed wrap ── */
+        .wrap{min-height:100vh;background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border);}
+
+        /* ── mobile header ── */
+        .x-header{position:sticky;top:0;z-index:50;background:rgba(253,250,245,0.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 16px;height:52px;display:flex;align-items:center;gap:12px;}
         .header-logo{cursor:pointer;border-radius:8px;object-fit:cover;user-select:none;border:1.5px solid var(--border);flex-shrink:0;transition:opacity 0.15s,border-color 0.15s;}
         .header-logo:hover{opacity:0.75;border-color:var(--red);}
-        .header-title{font-family:'Playfair Display',serif;font-weight:700;font-size:18px;line-height:1.1;letter-spacing:-0.01em;}
-        .header-sub{font-size:12px;color:var(--muted);margin-top:1px;}
+        .header-title{font-family:'Playfair Display',serif;font-weight:700;font-size:17px;line-height:1.1;letter-spacing:-0.01em;}
+        .header-sub{font-size:11px;color:var(--muted);margin-top:1px;}
         .admin-pill{background:var(--red-pale);border:1px solid rgba(184,50,50,0.3);border-radius:999px;color:var(--red);font-size:10px;font-weight:600;letter-spacing:0.1em;padding:3px 10px;text-transform:uppercase;}
         .user-btn{display:flex;align-items:center;gap:8px;background:none;border:1px solid var(--border);border-radius:999px;cursor:pointer;padding:5px 12px 5px 6px;transition:border-color 0.15s,background 0.15s;font-family:inherit;}
         .user-btn:hover{border-color:var(--red);background:var(--red-pale);}
         .login-btn{background:var(--red);border:none;border-radius:999px;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;padding:7px 16px;transition:background 0.15s;white-space:nowrap;}
         .login-btn:hover{background:var(--red-h);}
+
+        /* ── mobile menu dropdown ── */
+        .mob-menu{position:absolute;top:56px;right:12px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:8px;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,0.12);z-index:100;display:flex;flex-direction:column;gap:2px;}
+        .mob-menu-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;color:var(--text);border:none;background:none;font-family:inherit;width:100%;text-align:left;text-decoration:none;transition:background 0.15s;}
+        .mob-menu-item:hover{background:var(--bg2);}
+        .mob-menu-item.danger{color:var(--red);}
+        .mob-menu-item svg{width:18px;height:18px;flex-shrink:0;}
+        [data-theme="dark"] .mob-menu{background:var(--surface);}
+
+        /* ── responsive ── */
+        @media(max-width:900px){.page-layout{grid-template-columns:1fr;}.sidebar{display:none;}.right-col{display:none;}}
+        @media(min-width:901px){.x-header{display:none;}}
         .av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0;}
         .compose{display:flex;gap:14px;padding:16px 20px 0;border-bottom:6px solid var(--bg2);background:var(--surface);}
         .compose-col{flex:1;min-width:0;}
@@ -398,7 +395,7 @@ export default function Home() {
         .tweet-row{display:flex;gap:14px;padding:16px 20px 0;border-bottom:1px solid var(--border2);cursor:pointer;transition:background 0.12s;background:var(--surface);}
         .tweet-row:hover{background:#faf5ee;}
         .tweet-col{flex:1;min-width:0;padding-bottom:14px;}
-        .tweet-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:4px;}
+        .tweet-meta{display:flex;align-items:flex-start;gap:5px;margin-bottom:4px;}
         .tw-name{font-weight:600;font-size:14px;color:var(--text);}
         .tw-handle{font-size:13px;color:var(--muted);}
         .tw-dot{color:var(--muted2);}
@@ -424,23 +421,39 @@ export default function Home() {
         .comments-area{border-bottom:1px solid var(--border2);background:var(--bg2);}
         .comment-root{border-bottom:1px solid var(--border2);}
         .comment-root:last-of-type{border-bottom:none;}
-        .comment-item{display:flex;gap:10px;padding:12px 20px;transition:background 0.12s;}
-        .comment-item:hover{background:rgba(245,240,232,0.7);}
-        .comment-children{padding-left:20px;border-left:2px solid var(--border2);margin-left:36px;}
+        .comment-item{display:flex;gap:10px;padding:10px 16px;transition:background 0.12s;}
+        .comment-item:hover{background:rgba(245,240,232,0.5);}
+        .comment-children{padding-left:0;border-left:2px solid var(--border2);margin-left:52px;}
         .c-name{font-weight:600;font-size:13px;color:var(--text);}
         .c-time{font-size:12px;color:var(--muted);}
         .c-body{font-size:14px;color:var(--text);line-height:1.55;margin-top:2px;}
         .c-reply-btn{background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);font-family:inherit;padding:3px 0;margin-top:4px;transition:color 0.15s;}
         .c-reply-btn:hover{color:var(--red);}
-        .reply-box{display:flex;flex-direction:column;gap:8px;padding:12px 20px 14px;border-top:1px solid var(--border2);background:var(--surface);}
+        .reply-box{display:flex;flex-direction:column;gap:8px;padding:10px 16px 12px;border-top:1px solid var(--border2);background:var(--surface);}
         .reply-col{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0;}
         .reply-inp{background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;width:100%;}
         .reply-inp::placeholder{color:var(--muted2);font-style:italic;}
-        .reply-send{background:var(--red);border:none;border-radius:999px;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:7px 18px;white-space:nowrap;flex-shrink:0;transition:background 0.15s;}
+        .reply-send{background:var(--red);border:none;border-radius:999px;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:5px 14px;white-space:nowrap;flex-shrink:0;transition:background 0.15s;}
         .reply-send:hover{background:var(--red-h);}
         .empty{padding:72px 20px;text-align:center;color:var(--muted);}
         .empty-icon{font-size:40px;margin-bottom:14px;}
         .empty-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:6px;}
+        .podium-wrap{padding:16px;border-bottom:6px solid var(--bg2);}
+        .podium-wrap.sidebar-mode{padding:0;border:none;background:none;}
+        .podium-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+        .podium-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;}
+        .podium-grid.sidebar-mode{grid-template-columns:1fr;gap:8px;align-items:stretch;}
+        .podium-col{display:flex;flex-direction:column;align-items:center;gap:0;}
+        .podium-col.sidebar-mode{flex-direction:row;align-items:flex-start;gap:10px;background:var(--bg2);border-radius:12px;padding:10px 12px;border:1px solid var(--border2);}
+        .podium-card{width:100%;background:var(--bg2);border-radius:12px 12px 0 0;padding:10px 8px 8px;border:1px solid var(--border2);border-bottom:none;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;}
+        .podium-rank{font-size:18px;margin-bottom:2px;}
+        .podium-bar{width:100%;border-radius:0 0 4px 4px;border:1px solid var(--border2);border-top:none;}
+        .podium-name{font-size:11px;font-weight:700;color:var(--text);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+        .podium-text{font-size:11px;color:var(--muted);line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-align:center;}
+        .podium-text.sidebar-mode{text-align:left;-webkit-line-clamp:2;}
+        .podium-likes{font-size:11px;color:var(--muted2);margin-top:2px;}
+        @media(min-width:901px){.podium-wrap:not(.sidebar-mode){display:none;}}
+        [data-theme="dark"] .podium-card{background:var(--bg2);}
         .overlay{position:fixed;inset:0;z-index:200;background:rgba(26,21,16,0.5);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;}
         .modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:28px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,0.15);max-height:90vh;overflow-y:auto;}
         .modal-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;}
@@ -463,53 +476,94 @@ export default function Home() {
         .av-upload-overlay svg{width:18px;height:18px;color:#fff;}
       `}</style>
 
-      <div className="wrap">
-        {/* HEADER */}
-        <div className="x-header">
-          <img src="/logo.jpeg" alt="logo" className="header-logo" width={36} height={36} />
-          <div style={{ flex: 1 }}>
-            <div className="header-title">Weird Assumptions</div>
-            <div className="header-sub">{assumptions.length} post pubblicati</div>
+      <div className="page-layout">
+
+        {/* ── SIDEBAR DESKTOP ── */}
+        <aside className="sidebar">
+          <a href="/" className="sidebar-logo">
+            <img src="/logo.jpeg" alt="WA" width={36} height={36} />
+            <span className="sidebar-logo-text">Weird<br/>Assumptions</span>
+          </a>
+
+          <a href="/" className="nav-item active">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            Home
+          </a>
+          {profile && (
+            <a href={`/${profile.username}`} className="nav-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profilo
+            </a>
+          )}
+
+          <div className="sidebar-bottom">
+            {isAdmin && <span className="admin-pill" style={{ textAlign:"center", marginBottom:4 }}>Admin</span>}
+            <button className="nav-item" onClick={() => setDark(d => !d)} style={{ color:"var(--muted)", fontSize:14 }}>
+              {dark
+                ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              }
+              {dark ? "Modalità chiara" : "Modalità scura"}
+            </button>
+            {user && profile ? (
+              <>
+                <a href={`/${profile.username}`} className="sidebar-user">
+                  <Avatar profile={profile} size={36} />
+                  <div className="sidebar-user-info">
+                    <div className="sidebar-user-name">{displayFor(profile.username, profile.display_name)}</div>
+                    <div className="sidebar-user-handle">@{handleFor(profile.username)}</div>
+                  </div>
+                </a>
+                <button className="nav-item" onClick={handleLogout} style={{ color:"var(--muted)", fontSize:14 }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button className="login-btn" style={{ margin:"8px 10px" }} onClick={() => openAuth("login")}>Accedi</button>
+            )}
           </div>
-          {isAdmin && <span className="admin-pill">Admin</span>}
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={() => setDark(d => !d)}
-              title={dark ? "Modalità chiara" : "Modalità scura"}
-              style={{ background: "none", border: "1px solid var(--border)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex", alignItems: "center", color: "var(--muted)", transition: "border-color 0.15s,color 0.15s" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--red)"; e.currentTarget.style.color = "var(--text)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--muted)"; }}>
+        </aside>
+
+        {/* ── FEED ── */}
+        <div className="wrap">
+          {/* HEADER MOBILE */}
+          <div className="x-header" style={{ position:"relative" }}>
+            <img src="/logo.jpeg" alt="logo" className="header-logo" width={28} height={28} style={{ borderRadius:7, border:"1.5px solid var(--border)" }} />
+            <div style={{ flex: 1 }}>
+              <div className="header-title" style={{ fontSize:15 }}>Weird Assumptions</div>
+            </div>
+            <button onClick={() => setDark(d => !d)} style={{ background:"none", border:"1px solid var(--border)", borderRadius:999, cursor:"pointer", padding:"5px 8px", display:"flex", alignItems:"center", color:"var(--muted)" }}>
               {dark
                 ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                 : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               }
             </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {user && profile ? (
               <>
-                <button className="user-btn" onClick={() => {
-                  setEditBio(profile.bio); setEditColor(profile.avatar_color);
-                  setEditDisplayName(profile.display_name || profile.username);
-                  setAvatarPreview(null); setModal("profile");
-                }}>
-                  <Avatar profile={profile} size={26} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                    {isOfficial(profile.username) ? OFFICIAL_HANDLE : profile.username}
-                  </span>
+                <button
+                  onClick={() => setMenuOpen(m => !m)}
+                  style={{ background:"none", border:"none", cursor:"pointer", padding:4, borderRadius:"50%", display:"flex" }}>
+                  <Avatar profile={profile} size={32} />
                 </button>
-                <button className="act del" style={{ minWidth: "unset", padding: "6px 8px" }} onClick={handleLogout} title="Logout">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                    <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-                  </svg>
-                </button>
+                {menuOpen && (
+                  <div className="mob-menu" onClick={() => setMenuOpen(false)}>
+                    <a href={`/${profile.username}`} className="mob-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      Profilo
+                    </a>
+
+                    <button className="mob-menu-item danger" onClick={handleLogout}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                      Logout
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <button className="login-btn" onClick={() => openAuth("login")}>Accedi</button>
             )}
-            </div>
           </div>
-        </div>
 
         {/* COMPOSE */}
         <div className="compose">
@@ -540,6 +594,9 @@ export default function Home() {
           </div>
         </div>
 
+        {/* PODIO MOBILE */}
+        {assumptions.length > 0 && <Podium assumptions={assumptions} />}
+
         {/* FEED */}
         {assumptions.length === 0 ? (
           <div className="empty">
@@ -552,9 +609,9 @@ export default function Home() {
             comments={comments.filter(c => c.assumption_id === a.id)}
             isAdmin={isAdmin} profile={profile}
             onLike={likePost} onDelete={deletePost} onPin={pinPost}
-            onDeleteComment={deleteComment} onAddComment={addComment} />
+            onDeleteComment={deleteComment} onAddComment={addComment}
+            onEditPost={editPost} onEditComment={editComment} />
         ))}
-      </div>
 
       {/* AUTH MODAL */}
       {modal === "auth" && (
@@ -603,7 +660,7 @@ export default function Home() {
                     <div>
                       <div className="f-label" style={{ marginBottom: 8 }}>Colore avatar</div>
                       <div className="color-row">
-                        {AVATAR_COLORS.map(c => (
+                        {AVATAR_COLORS.map((c: string) => (
                           <div key={c} className={`color-dot${regColor === c ? " sel" : ""}`} style={{ background: c }} onClick={() => setRegColor(c)} />
                         ))}
                       </div>
@@ -674,11 +731,11 @@ export default function Home() {
                 <div className="f-label">Bio</div>
                 <input className="f-inp" placeholder="Descriviti in una riga…" value={editBio} onChange={e => setEditBio(e.target.value)} />
               </div>
-              {!isOfficial(profile.username) && !avatarPreview && (
+              {!isOfficial(profile.username) && !avatarPreview && !profile.avatar_url && (
                 <div>
                   <div className="f-label" style={{ marginBottom: 8 }}>Colore avatar <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(se non carichi foto)</span></div>
                   <div className="color-row">
-                    {AVATAR_COLORS.map(c => (
+                    {AVATAR_COLORS.map((c: string) => (
                       <div key={c} className={`color-dot${editColor === c ? " sel" : ""}`} style={{ background: c }} onClick={() => setEditColor(c)} />
                     ))}
                   </div>
@@ -731,7 +788,105 @@ export default function Home() {
           </div>
         </div>
       )}
+        </div>{/* /wrap */}
+
+        {/* ── COLONNA DESTRA DESKTOP ── */}
+        <aside className="right-col">
+          {assumptions.length > 0 && <Podium assumptions={assumptions} sidebar />}
+        </aside>
+      </div>{/* /page-layout */}
     </>
+  );
+}
+
+
+/* ─── Podium ─── */
+function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?: boolean }) {
+  const top3 = [...assumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 3);
+  if (top3.length === 0) return null;
+
+  // ordine visivo podio: 2°, 1°, 3°
+  const order = [top3[1], top3[0], top3[2]].filter(Boolean);
+  const barHeights = [70, 100, 50]; // altezze barre podio in px
+  const medals = ["🥈", "🥇", "🥉"];
+  const rankColors = ["#a0a0b0", "#c4a436", "#b87040"];
+  const ranks = [2, 1, 3];
+
+  if (sidebar) {
+    return (
+      <div className="podium-wrap sidebar-mode">
+        <div className="podium-label">🔥 Top questa settimana</div>
+        <div className="podium-grid sidebar-mode">
+          {top3.map((a, i) => (
+            <div key={a.id} className="podium-col sidebar-mode">
+              <div style={{ flexShrink: 0, display:"flex", alignItems:"center", justifyContent:"center", width:28, height:28, borderRadius:8, background: i===0 ? "rgba(196,164,54,0.15)" : i===1 ? "rgba(160,160,176,0.15)" : "rgba(184,112,64,0.12)", fontSize:14 }}>
+                {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:3 }}>
+                  <UAv username={a.username} size={16} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
+                  <span style={{ fontSize:11, fontWeight:700, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{displayFor(a.username, a.display_name)}</span>
+                </div>
+                <div style={{ fontSize:12, color:"var(--muted)", lineHeight:1.4, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{a.text}</div>
+                <div style={{ fontSize:11, color:"var(--muted2)", marginTop:3 }}>♡ {a.likes || 0}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="podium-wrap">
+      <div className="podium-label">🔥 Top questa settimana</div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, alignItems:"end", padding:"0 4px" }}>
+        {order.map((a, i) => {
+          const rank = ranks[i];
+          const medal = medals[i];
+          const color = rankColors[i];
+          const barH = barHeights[i];
+          const isFirst = rank === 1;
+          return (
+            <div key={a.id} style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
+              {/* card sopra la barra */}
+              <div style={{
+                width:"100%", background:"var(--bg2)", border:`1px solid ${color}40`,
+                borderRadius:"12px 12px 0 0", padding: isFirst ? "12px 8px 10px" : "10px 6px 8px",
+                display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+                boxShadow: isFirst ? `0 0 20px ${color}30` : "none",
+                position:"relative"
+              }}>
+                {isFirst && (
+                  <div style={{ position:"absolute", top:-10, left:"50%", transform:"translateX(-50%)", fontSize:20 }}>👑</div>
+                )}
+                <UAv username={a.username} size={isFirst ? 36 : 28} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
+                <div style={{ fontSize:10, fontWeight:700, color:"var(--text)", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", width:"100%", maxWidth:80 }}>
+                  {displayFor(a.username, a.display_name)}
+                </div>
+                <div style={{ fontSize:10, color:"var(--muted)", lineHeight:1.3, textAlign:"center", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                  {a.text}
+                </div>
+                <div style={{ fontSize:11, color: color, fontWeight:700, marginTop:2 }}>
+                  ♡ {a.likes || 0}
+                </div>
+              </div>
+              {/* barra podio */}
+              <div style={{
+                width:"100%", height: barH,
+                background: `linear-gradient(to bottom, ${color}40, ${color}20)`,
+                border:`1px solid ${color}50`, borderTop:"none",
+                borderRadius:"0 0 8px 8px",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize: isFirst ? 22 : 18
+              }}>
+                {medal}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -749,174 +904,6 @@ function CharRing({ count, max }: { count: number; max: number }) {
           style={{ transition: "stroke-dashoffset 0.2s,stroke 0.2s" }} />
       </svg>
       {left <= 20 && <span className="cring-n" style={{ color }}>{left}</span>}
-    </div>
-  );
-}
-
-/* ─── Tweet card ─── */
-function TweetCard({ a, comments, isAdmin, profile, onLike, onDelete, onPin, onDeleteComment, onAddComment }: any) {
-  const [open, setOpen] = useState(false);
-  const roots = comments.filter((c: Comment) => !c.parent_id);
-  return (
-    <div>
-      {a.pinned && (
-        <div className="pin-banner">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="#8a6a3a" stroke="none"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
-          Post in evidenza
-        </div>
-      )}
-      <div className="tweet-row" onClick={() => setOpen(o => !o)}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          {a.username !== "anonimo" ? (
-            <a href={`/${a.username}`} onClick={e => e.stopPropagation()}>
-              <UAv username={a.username} size={42} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
-            </a>
-          ) : (
-            <UAv username={a.username} size={42} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
-          )}
-          {open && comments.length > 0 && <div className="thread-line" />}
-        </div>
-        <div className="tweet-col" onClick={e => e.stopPropagation()}>
-          <div className="tweet-meta">
-            {a.username !== "anonimo" ? (
-              <a href={`/${a.username}`} style={{ fontWeight:600, fontSize:14, color:"var(--text)", textDecoration:"none" }}
-                onClick={e => e.stopPropagation()}
-                onMouseEnter={e => (e.currentTarget.style.textDecoration="underline")}
-                onMouseLeave={e => (e.currentTarget.style.textDecoration="none")}>
-                {displayFor(a.username, a.display_name)}
-              </a>
-            ) : (
-              <span style={{ fontWeight:600, fontSize:14, color:"var(--text)" }}>{displayFor(a.username, a.display_name)}</span>
-            )}
-            {a.is_verified && <Badge size={15} />}
-            <span className="tw-handle">@{handleFor(a.username)}</span>
-            <span className="tw-dot">·</span>
-            <span className="tw-time">{fmt(a.created_at)}</span>
-          </div>
-          <div className="tweet-body">{a.text}</div>
-          <div className="abar">
-            <button className="act cmt" onClick={() => setOpen(o => !o)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              {comments.length > 0 && <span>{comments.length}</span>}
-            </button>
-            <button className={`act lk${a.alreadyLiked ? " on" : ""}`} onClick={() => onLike(a.id, a.alreadyLiked)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              {a.likes > 0 && <span>{a.likes}</span>}
-            </button>
-            {isAdmin && (
-              <>
-                <button className={`act pin${a.pinned ? " on" : ""}`} onClick={() => onPin(a.id, a.pinned)} title={a.pinned ? "Rimuovi pin" : "Pinna"}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
-                </button>
-                <button className="act del" onClick={() => onDelete(a.id)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      {open && (
-        <div className="comments-area">
-          {roots.map((c: Comment) => (
-            <CommentNode key={c.id} comment={c} allComments={comments}
-              isAdmin={isAdmin} profile={profile} assumptionId={a.id}
-              onDelete={onDeleteComment} onAdd={onAddComment} depth={0} />
-          ))}
-          <ReplyBox assumptionId={a.id} addComment={onAddComment}
-            targetUsername={displayFor(a.username, a.display_name)}
-            profile={profile} parentId={null} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Comment node ─── */
-function CommentNode({ comment: c, allComments, isAdmin, profile, assumptionId, onDelete, onAdd, depth }: {
-  comment: Comment; allComments: Comment[]; isAdmin: boolean; profile: Profile | null;
-  assumptionId: string; onDelete: (id: string) => void;
-  onAdd: (aid: string, t: string, parentId: string | null) => void; depth: number;
-}) {
-  const [replying, setReplying] = useState(false);
-  const children = allComments.filter(x => x.parent_id === c.id);
-  return (
-    <div className="comment-root">
-      <div className="comment-item">
-        {c.username !== "anonimo" ? (
-          <a href={`/${c.username}`}>
-            <UAv username={c.username} size={32} avatarUrl={c.avatar_url} avatarColor={c.avatar_color} />
-          </a>
-        ) : (
-          <UAv username={c.username} size={32} avatarUrl={c.avatar_url} avatarColor={c.avatar_color} />
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            {c.username !== "anonimo" ? (
-              <a href={`/${c.username}`} style={{ fontWeight:600, fontSize:13, color:"var(--text)", textDecoration:"none" }}
-                onMouseEnter={e => (e.currentTarget.style.textDecoration="underline")}
-                onMouseLeave={e => (e.currentTarget.style.textDecoration="none")}>
-                {displayFor(c.username, c.display_name)}
-              </a>
-            ) : (
-              <span style={{ fontWeight:600, fontSize:13, color:"var(--text)" }}>{displayFor(c.username, c.display_name)}</span>
-            )}
-            {c.is_verified && <Badge size={13} />}
-            <span className="c-time">· {fmt(c.created_at)}</span>
-          </div>
-          <div className="c-body">{c.text}</div>
-          <button className="c-reply-btn" onClick={() => setReplying(r => !r)}>
-            {replying ? "Annulla" : "↩ Rispondi"}
-          </button>
-        </div>
-        {isAdmin && (
-          <button className="act del" style={{ alignSelf: "flex-start", padding: "2px 6px", minWidth: "unset" }} onClick={() => onDelete(c.id)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        )}
-      </div>
-      {replying && (
-        <div style={{ paddingLeft: depth < 3 ? 52 : 20, background: "rgba(245,240,232,0.5)", borderTop: "1px solid var(--border2)" }}>
-          <ReplyBox assumptionId={assumptionId}
-            addComment={(aid, t, pid) => { onAdd(aid, t, pid); setReplying(false); }}
-            targetUsername={displayFor(c.username, c.display_name)}
-            profile={profile} parentId={c.id} />
-        </div>
-      )}
-      {children.length > 0 && (
-        <div className="comment-children" style={{ marginLeft: depth < 3 ? 36 : 12 }}>
-          {children.map(child => (
-            <CommentNode key={child.id} comment={child} allComments={allComments}
-              isAdmin={isAdmin} profile={profile} assumptionId={assumptionId}
-              onDelete={onDelete} onAdd={onAdd} depth={depth + 1} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Reply box ─── */
-function ReplyBox({ assumptionId, addComment, targetUsername, profile, parentId }: {
-  assumptionId: string; addComment: (aid: string, t: string, pid: string | null) => void;
-  targetUsername: string; profile: Profile | null; parentId: string | null;
-}) {
-  const [t, setT] = useState("");
-  const submit = () => { if (!t.trim()) return; addComment(assumptionId, t, parentId); setT(""); };
-  return (
-    <div className="reply-box">
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <Avatar profile={profile} size={34} />
-        <div className="reply-col">
-          <div style={{ fontSize: 13, fontWeight: 600, color: profile ? "var(--text)" : "var(--muted)", fontStyle: profile ? "normal" : "italic", paddingBottom: 3, display: "flex", alignItems: "center", gap: 5 }}>
-            {profile ? displayFor(profile.username, profile.display_name) : "Anonimo"}
-            {profile?.is_verified && <Badge size={12} />}
-          </div>
-          <input className="reply-inp" placeholder={`Rispondi a ${targetUsername}…`} value={t}
-            onChange={e => setT(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
-        </div>
-        <button className="reply-send" onClick={submit}>Rispondi</button>
-      </div>
     </div>
   );
 }
