@@ -2,6 +2,39 @@
 
 import { useState, useEffect, memo, useCallback } from "react";
 import Link from "next/link";
+
+/* ─── Render testo con hashtag evidenziati ─── */
+function renderWithHashtags(text: string, onHashtag?: (tag: string) => void) {
+  const parts = text.split(/(#[\w\u00C0-\u024F]+)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("#")) {
+      return (
+        <span
+          key={i}
+          onClick={e => { e.stopPropagation(); e.preventDefault(); onHashtag?.(part.toLowerCase()); }}
+          onMouseEnter={e => {
+            if (onHashtag) {
+              (e.currentTarget as HTMLElement).style.opacity = "0.7";
+              (e.currentTarget as HTMLElement).style.textDecoration = "underline";
+            }
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.opacity = "1";
+            (e.currentTarget as HTMLElement).style.textDecoration = "none";
+          }}
+          style={{
+            color: "var(--red)", fontWeight: 600,
+            cursor: onHashtag ? "pointer" : "inherit",
+            transition: "opacity 0.15s",
+            userSelect: "none",
+          }}
+        >{part}</span>
+      );
+    }
+    return part;
+  });
+}
+
 import { Avatar, UAv, Badge } from "./Avatar";
 import {
   displayFor, handleFor, fmt,
@@ -24,27 +57,54 @@ export function useTick(ms = 10_000) {
 }
 
 /* ─── Add comment box (trigger visivo) ─── */
-export function AddCommentBox({ profile, onOpen }: {
+export function AddCommentBox({ profile, onOpen, onSubmit, activeReply, setActiveReply }: {
   assumptionId: string;
   addComment: (aid: string, t: string, pid: string | null) => void;
   targetUsername: string;
   profile: Profile | null;
   onOpen?: () => void;
+  onSubmit?: (text: string) => void;
+  activeReply?: string | null;
+  setActiveReply?: (v: string | null) => void;
 }) {
+  const [val, setVal] = useState("");
+  useEffect(() => { if (activeReply !== "main") setVal(""); }, [activeReply]);
   return (
-    <button
-      onClick={() => onOpen?.()}
-      style={{
-        display: "flex", alignItems: "center", gap: 8,
-        padding: "10px 16px", background: "none", border: "none",
-        cursor: "pointer", color: "var(--muted)", fontSize: 13,
-        fontFamily: "inherit", width: "100%",
-        borderTop: "1px solid var(--border2)",
-      }}
-    >
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "8px 16px 10px", borderTop: "1px solid var(--border2)",
+    }}>
       <Avatar profile={profile} size={24} />
-      <span style={{ fontStyle: "italic", color: "var(--muted2)" }}>Commenta questa WA…</span>
-    </button>
+      <input
+        style={{
+          flex: 1, background: "none", border: "none", outline: "none",
+          fontSize: 13, color: "var(--muted2)", fontFamily: "inherit",
+          fontStyle: val ? "normal" : "italic",
+        }}
+        placeholder="Commenta questa WA…"
+        value={val}
+        onFocus={() => { onOpen?.(); setActiveReply?.("main"); }}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === "Enter" && val.trim()) { onSubmit?.(val); setVal(""); }
+          if (e.key === "Escape") { setVal(""); }
+        }}
+      />
+      {val.trim() && (
+        <button
+          onClick={() => { onSubmit?.(val); setVal(""); }}
+          style={{
+            width: 28, height: 28, borderRadius: "50%", border: "none",
+            background: "var(--red)", color: "#fff", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -67,19 +127,14 @@ export function ReplyBox({ assumptionId, addComment, targetUsername, profile, pa
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 8,
-      padding: "8px 16px", borderTop: "1px solid var(--border2)",
-      background: "var(--surface)",
+      padding: "8px 16px 10px", borderTop: "1px solid var(--border2)",
     }}>
-      <Avatar profile={profile} size={26} />
+      <Avatar profile={profile} size={24} />
       <input
         style={{
-          flex: 1, background: "var(--bg2)", border: "1px solid transparent",
-          borderRadius: 999, outline: "none", padding: "7px 14px",
-          fontSize: 13, color: "var(--text)", fontFamily: "inherit",
-          transition: "border-color 0.15s",
+          flex: 1, background: "none", border: "none", outline: "none",
+          fontSize: 13, color: "var(--muted2)", fontFamily: "inherit", fontStyle: t ? "normal" : "italic",
         }}
-        onFocus={e => (e.currentTarget.style.borderColor = "var(--border)")}
-        onBlur={e => (e.currentTarget.style.borderColor = "transparent")}
         placeholder={`Rispondi a ${targetUsername}…`}
         value={t}
         onChange={e => setT(e.target.value)}
@@ -89,15 +144,17 @@ export function ReplyBox({ assumptionId, addComment, targetUsername, profile, pa
         }}
         autoFocus
       />
-      {onClose && (
-        <button
-          onClick={onClose}
-          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 18, padding: "0 4px" }}
-        >×</button>
+      {t.trim() && (
+        <button onClick={submit} style={{
+          width: 28, height: 28, borderRadius: "50%", border: "none",
+          background: "var(--red)", color: "#fff", cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
       )}
-      <button className="reply-send" onClick={submit} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, padding: 0 }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-      </button>
     </div>
   );
 }
@@ -124,7 +181,7 @@ export function CommentNode({
   const children = allComments.filter(x => x.parent_id === c.id);
 
   return (
-    <div className="comment-root">
+    <div className="comment-root" style={depth === 0 ? { marginTop: depth === 0 ? 4 : 0 } : {}}>
       <div className="comment-item">
         {c.username !== "anonimo" ? (
           <Link href={`/${c.username}`}>
@@ -178,7 +235,7 @@ export function CommentNode({
             </div>
           ) : (
             <div className="c-body">
-              {c.text}
+              {renderWithHashtags(c.text, tag => { window.location.href = `/?tag=${encodeURIComponent(tag)}`; })}
               {c.edited && <span style={{ fontSize: 10, color: "var(--muted2)", marginLeft: 5, fontStyle: "italic" }}>· modificato</span>}
             </div>
           )}
@@ -232,7 +289,7 @@ export function CommentNode({
       {replying && (
         <div style={{
           paddingLeft: depth < 3 ? 52 : 20,
-          background: "rgba(245,240,232,0.5)",
+          background: "var(--surface)",
           borderTop: "1px solid var(--border2)",
         }}>
           <ReplyBox
@@ -274,7 +331,7 @@ export function CommentNode({
 export const TweetCard = memo(function TweetCard({
   a, comments, isAdmin, profile, onLike, onDelete, onPin,
   onDeleteComment, onAddComment, onEditPost, onEditComment,
-  currentUsername = "", openCommentId, setOpenCommentId,
+  currentUsername = "", openCommentId, setOpenCommentId, onHashtag,
 }: {
   a: Assumption;
   comments: Comment[];
@@ -290,6 +347,7 @@ export const TweetCard = memo(function TweetCard({
   currentUsername?: string;
   openCommentId?: string | null;
   setOpenCommentId?: (id: string | null) => void;
+  onHashtag?: (tag: string) => void;
 }) {
   useTick();
   const [editing, setEditing] = useState(false);
@@ -325,7 +383,7 @@ export const TweetCard = memo(function TweetCard({
         </div>
       )}
 
-      <div className="tweet-row" onClick={() => setOpen(!open)}>
+      <div className="tweet-row" onClick={() => { setOpen(!open); if (open) setActiveReply(null); }}>
         {/* Avatar + thread line */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
           {a.username !== "anonimo" && a.username !== currentUsername ? (
@@ -393,14 +451,14 @@ export const TweetCard = memo(function TweetCard({
             </div>
           ) : (
             <div className="tweet-body">
-              {a.text}
+              {renderWithHashtags(a.text, onHashtag)}
               {a.edited && <span style={{ fontSize: 11, color: "var(--muted2)", marginLeft: 6, fontStyle: "italic" }}>· modificato</span>}
             </div>
           )}
 
           {/* Action bar */}
           <div className="abar">
-            <button className="act cmt" onClick={() => setOpen(!open)}>
+            <button className="act cmt" onClick={e => { e.stopPropagation(); setOpen(!open); if (open) setActiveReply(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
@@ -490,26 +548,20 @@ export const TweetCard = memo(function TweetCard({
             />
           ))}
 
-          {activeReply === null && (
+          {(!activeReply || activeReply === "main") && (
             <AddCommentBox
               assumptionId={a.id}
               addComment={handleAddComment}
               targetUsername={displayFor(a.username, a.display_name)}
               profile={profile}
-              onOpen={() => { setOpenCommentId?.(a.id); setActiveReply("main"); }}
+              onOpen={() => setOpenCommentId?.(a.id)}
+              onSubmit={t => handleAddComment(a.id, t, null)}
+              activeReply={activeReply}
+              setActiveReply={setActiveReply}
             />
           )}
 
-          {activeReply === "main" && (
-            <ReplyBox
-              assumptionId={a.id}
-              addComment={handleAddComment}
-              targetUsername={displayFor(a.username, a.display_name)}
-              profile={profile}
-              parentId={null}
-              onClose={() => setActiveReply(null)}
-            />
-          )}
+
         </div>
       )}
     </div>

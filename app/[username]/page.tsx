@@ -97,6 +97,7 @@ export default function ProfilePage() {
   const [isAdmin, setIsAdmin]     = useState(false);
   const [menuOpen, setMenuOpen]   = useState(false);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+  const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
   const [zoomAvatar, setZoomAvatar] = useState(false);
 
   /* ── dark mode ── */
@@ -312,8 +313,7 @@ export default function ProfilePage() {
         {/* ── SIDEBAR ── */}
         <aside className="sidebar">
           <Link href="/" className="sidebar-logo">
-            <img src="/logo.jpeg" alt="WA" width={36} height={36} style={{ borderRadius: 9, border: "1.5px solid var(--border)", flexShrink: 0 }} />
-            <span className="sidebar-logo-text">Weird<br/>Assumptions</span>
+            <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Weird Assumptions" height={44} style={{ objectFit: "contain", flexShrink: 0, maxWidth: 200 }} />
           </Link>
           <Link href="/" className="nav-item">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" /></svg>
@@ -365,8 +365,7 @@ export default function ProfilePage() {
             </button>
             {/* Logo + titolo */}
             <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", flex: 1 }}>
-              <img src="/logo.jpeg" alt="WA" width={30} height={30} style={{ borderRadius: 8, border: "1.5px solid var(--border)", flexShrink: 0 }} />
-              <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 17, color: "var(--text)", letterSpacing: "-0.01em", lineHeight: 1 }}>Weird Assumptions</span>
+              <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Weird Assumptions" height={32} style={{ objectFit: "contain", maxWidth: 160 }} />
             </Link>
             {/* Bottone dark mode — identico alla home */}
             <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", color: "var(--muted)", borderRadius: 8, transition: "background 0.15s" }}
@@ -465,6 +464,7 @@ export default function ProfilePage() {
                 currentUsername={pageProfile!.username}
                 onDeleteComment={deleteComment} onAddComment={addComment}
                 onEditPost={editPost} onEditComment={editComment}
+                onHashtag={tag => { window.location.href = `/?tag=${encodeURIComponent(tag)}`; }}
               />
             ))}
           </div>

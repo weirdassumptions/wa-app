@@ -44,6 +44,18 @@ export default function Home() {
   const taRef      = useRef<HTMLTextAreaElement>(null);
   const [composeFocused, setComposeFocused] = useState(false);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+  const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  useEffect(() => {
+    const tag = new URLSearchParams(window.location.search).get("tag");
+    if (tag) setActiveHashtag(tag);
+  }, []);
   const [waPlaceholder, setWaPlaceholder] = useState("");
   useEffect(() => { setWaPlaceholder(WA_PLACEHOLDERS[Math.floor(Math.random() * WA_PLACEHOLDERS.length)]); }, []);
 
@@ -383,8 +395,7 @@ export default function Home() {
         {/* ── SIDEBAR DESKTOP ── */}
         <aside className="sidebar">
           <Link href="/" className="sidebar-logo">
-            <img src="/logo.jpeg" alt="WA" width={36} height={36} style={{ borderRadius: 9, border: "1.5px solid var(--border)", flexShrink: 0 }} />
-            <span className="sidebar-logo-text">Weird<br/>Assumptions</span>
+            <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Weird Assumptions" height={44} style={{ objectFit: "contain", flexShrink: 0, maxWidth: 200 }} />
           </Link>
 
           <Link href="/" className="nav-item active">
@@ -440,11 +451,7 @@ export default function Home() {
           <div className="x-header" style={{ position: "relative" }}>
             {/* Logo + titolo centrati */}
             <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flex: 1 }}>
-              <img src="/logo.jpeg" alt="WA" width={36} height={36} style={{ borderRadius: 9, border: "1.5px solid var(--border)", flexShrink: 0 }} />
-              <div style={{ lineHeight: 1.15 }}>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 800, fontSize: 15, color: "var(--text)", letterSpacing: "-0.02em" }}>Weird</div>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 800, fontSize: 15, color: "var(--text)", letterSpacing: "-0.02em" }}>Assumptions</div>
-              </div>
+              <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Weird Assumptions" height={32} style={{ objectFit: "contain", maxWidth: 160 }} />
             </Link>
             {/* Dark mode — icona senza bordo */}
             <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", color: "var(--muted)", borderRadius: 8, transition: "background 0.15s" }}
@@ -525,6 +532,25 @@ export default function Home() {
           {/* PODIO MOBILE */}
           {assumptions.length > 0 && <Podium assumptions={assumptions} />}
 
+          {/* HASHTAG FILTER BANNER */}
+          {activeHashtag && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "8px 16px", background: "var(--surface)",
+              borderBottom: "1px solid var(--border2)", fontSize: 13,
+            }}>
+              <span style={{ color: "var(--text)", fontWeight: 600 }}>
+                <span style={{ color: "var(--red)" }}>{activeHashtag}</span>
+                <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>· filtrando il feed</span>
+              </span>
+              <button onClick={() => setActiveHashtag(null)} style={{
+                background: "none", border: "1px solid var(--border2)", borderRadius: 999,
+                cursor: "pointer", color: "var(--muted)", fontSize: 12, padding: "2px 10px",
+                fontFamily: "inherit",
+              }}>✕ rimuovi</button>
+            </div>
+          )}
+
           {/* FEED */}
           {assumptions.length === 0 ? (
             <div className="empty">
@@ -532,17 +558,27 @@ export default function Home() {
               <div className="empty-title">Nessuna WA ancora</div>
               <div>Sii il primo a rompere il ghiaccio.</div>
             </div>
-          ) : assumptions.map(a => (
-            <TweetCard
-              key={a.id} a={a}
-              comments={commentsByPost[a.id] ?? []}
-              isAdmin={isAdmin} profile={profile}
-              onLike={likePost} onDelete={deletePost} onPin={pinPost}
-              onDeleteComment={deleteComment} onAddComment={addComment}
-              onEditPost={editPost} onEditComment={editComment}
-              openCommentId={openCommentId} setOpenCommentId={setOpenCommentId}
-            />
-          ))}
+          ) : assumptions
+            .filter(a => !activeHashtag || a.text.toLowerCase().includes(activeHashtag))
+            .flatMap((a, i) => {
+              const card = (
+                <TweetCard
+                  key={a.id} a={a}
+                  comments={commentsByPost[a.id] ?? []}
+                  isAdmin={isAdmin} profile={profile}
+                  onLike={likePost} onDelete={deletePost} onPin={pinPost}
+                  onDeleteComment={deleteComment} onAddComment={addComment}
+                  onEditPost={editPost} onEditComment={editComment}
+                  openCommentId={openCommentId} setOpenCommentId={setOpenCommentId}
+                  onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)}
+                />
+              );
+              if (i === 3 && !activeHashtag && isMobile) {
+                return [card, <TrendingHashtagsMobile key="trending-mobile" assumptions={assumptions} onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)} activeHashtag={activeHashtag} />];
+              }
+              return [card];
+            })
+          }
 
           {/* ── AUTH MODAL ── */}
           {modal === "auth" && (
@@ -718,6 +754,7 @@ export default function Home() {
         {/* ── COLONNA DESTRA DESKTOP ── */}
         <aside className="right-col">
           <Podium assumptions={assumptions} sidebar />
+          <TrendingHashtags assumptions={assumptions} activeHashtag={activeHashtag} onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)} />
 
         </aside>
       </div>{/* /page-layout */}
@@ -765,9 +802,82 @@ const WA_PLACEHOLDERS = [
   "Cosa pensi e non dici mai?",
   "Scrivilo prima che ti passi.",
   "Il mondo ha bisogno di sapere.",
-  "Questa è una zona franca. Scrivi.",
+  "This is a free space. Write.",
   "Scommettiamo che qualcuno la pensa come te?",
 ];
+
+
+
+/* ─── Trending Hashtags Mobile (card nel feed) ─── */
+function TrendingHashtagsMobile({ assumptions, onHashtag, activeHashtag }: {
+  assumptions: any[];
+  onHashtag: (tag: string) => void;
+  activeHashtag: string | null;
+}) {
+  const counts: Record<string, number> = {};
+  assumptions.forEach(a => {
+    const tags = Array.from(new Set<string>((a.text.match(/#[\w\u00C0-\u024F]+/g) || []).map((t: string) => t.toLowerCase())));
+    tags.forEach((tag: string) => { counts[tag] = (counts[tag] || 0) + 1; });
+  });
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  if (sorted.length === 0) return null;
+  return (
+    <div className="mobile-only" style={{
+      background: "var(--bg2)", borderBottom: "6px solid var(--bg2)",
+      padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Trending ora</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {sorted.map(([tag, count]) => (
+          <button key={tag} onClick={() => onHashtag(tag)} style={{
+            background: activeHashtag === tag ? "var(--red)" : "var(--surface)",
+            color: activeHashtag === tag ? "#fff" : "var(--red)",
+            border: `1px solid ${activeHashtag === tag ? "var(--red)" : "var(--border2)"}`,
+            borderRadius: 999, padding: "5px 12px", fontSize: 13, fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+            display: "flex", alignItems: "center", gap: 5,
+          }}>
+            {tag}
+            <span style={{ fontSize: 11, opacity: 0.7, fontWeight: 400 }}>{count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Trending Hashtags ─── */
+function TrendingHashtags({ assumptions, activeHashtag, onHashtag }: {
+  assumptions: any[];
+  activeHashtag: string | null;
+  onHashtag: (tag: string) => void;
+}) {
+  const counts: Record<string, number> = {};
+  assumptions.forEach(a => {
+    const tags = Array.from(new Set<string>((a.text.match(/#[\w\u00C0-\u024F]+/g) || []).map((t: string) => t.toLowerCase())));
+    tags.forEach((tag: string) => { counts[tag] = (counts[tag] || 0) + 1; });
+  });
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  if (sorted.length === 0) return null;
+  return (
+    <div style={{ padding: "16px 0" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.06em", textTransform: "uppercase", padding: "0 16px 10px" }}>Trending</div>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {sorted.map(([tag, count]) => (
+          <button key={tag} onClick={() => onHashtag(tag)} style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "7px 16px", background: activeHashtag === tag ? "var(--bg2)" : "none",
+            border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+            transition: "background 0.12s", borderRadius: 0,
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: activeHashtag === tag ? "var(--red)" : "var(--text)" }}>{tag}</span>
+            <span style={{ fontSize: 12, color: "var(--muted2)" }}>{count} WA</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* ─── Podium ─── */
 function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?: boolean }) {
