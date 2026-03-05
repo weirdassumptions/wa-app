@@ -50,6 +50,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   const navigateToPost = (id: string) => {
     const el = document.getElementById(`post-${id}`);
@@ -77,6 +78,12 @@ export default function Home() {
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -711,6 +718,24 @@ export default function Home() {
               return [card];
             })
           }
+
+          {/* Scroll to top */}
+          {showScrollTop && (
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              style={{
+                position: "fixed", bottom: 28, right: 28, zIndex: 500,
+                width: 44, height: 44, borderRadius: "50%",
+                background: "var(--red)", border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15"/>
+              </svg>
+            </button>
+          )}
 
           {/* ── AUTH MODAL ── */}
           {modal === "auth" && (
