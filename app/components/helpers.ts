@@ -1,7 +1,7 @@
 /* ─── Constants ─── */
 export const OFFICIAL_USERNAME = "wa";
 export const OFFICIAL_NAME     = "Weird Assumptions";
-export const OFFICIAL_HANDLE   = "weirdassumptions";
+export const OFFICIAL_HANDLE   = "wa";
 export const OFFICIAL_LOGO     = "/logo-icon.png";
 export const AVATAR_COLORS     = ["#b83232","#d4603a","#7a6a5a","#4a7a6a","#7a5a8a","#8a6a3a","#4a6a8a","#6a4a7a"];
 
