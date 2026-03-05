@@ -585,7 +585,7 @@ export default function Home() {
             <div className="overlay" onClick={() => setModal("none")}>
               <div className="modal" onClick={e => e.stopPropagation()}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                  <img src={OFFICIAL_LOGO} alt="WA" style={{ width: 38, height: 38, borderRadius: 9, objectFit: "cover", border: "1.5px solid var(--border)" }} />
+                  <img src={dark ? "/logo-icon-dark.png" : "/logo-icon.png"} alt="WA" style={{ width: 48, height: 48, objectFit: "contain", borderRadius: 12 }} />
                   <div>
                     <div className="modal-title">Weird Assumptions</div>
                     <div style={{ fontSize: 12, color: "var(--muted)" }}>Entra nella community</div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { isOfficial, avatarGrad, initial, OFFICIAL_LOGO } from "./helpers";
+import { isOfficial, avatarGrad, initial } from "./helpers";
 import type { Profile } from "./helpers";
 
 /* ─── Badge verificato ─── */
@@ -21,14 +21,6 @@ export function Avatar({ profile, size = 42 }: { profile: Profile | null; size?:
       <div className="av" style={{ width: size, height: size, background: "#c8bfb0", fontSize: size * 0.38 }}>
         ?
       </div>
-    );
-  if (isOfficial(profile.username))
-    return (
-      <img
-        src={OFFICIAL_LOGO}
-        alt="WA"
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--red)", flexShrink: 0 }}
-      />
     );
   if (profile.avatar_url)
     return (
@@ -57,14 +49,6 @@ export function UAv({
   avatarUrl?: string;
   avatarColor?: string;
 }) {
-  if (isOfficial(username))
-    return (
-      <img
-        src={OFFICIAL_LOGO}
-        alt="WA"
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--red)", flexShrink: 0 }}
-      />
-    );
   if (avatarUrl)
     return (
       <img

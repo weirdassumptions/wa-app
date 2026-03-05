@@ -464,7 +464,7 @@ export default function ProfilePage() {
                 currentUsername={pageProfile!.username}
                 onDeleteComment={deleteComment} onAddComment={addComment}
                 onEditPost={editPost} onEditComment={editComment}
-                onHashtag={tag => { window.location.href = `/?tag=${encodeURIComponent(tag)}`; }}
+                onHashtag={(tag: string) => { window.location.href = `/?tag=${encodeURIComponent(tag)}`; }}
               />
             ))}
           </div>
