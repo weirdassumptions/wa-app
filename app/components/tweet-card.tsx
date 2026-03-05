@@ -43,7 +43,7 @@ export function AddCommentBox({ profile, onOpen }: {
       }}
     >
       <Avatar profile={profile} size={24} />
-      <span style={{ fontStyle: "italic" }}>Aggiungi un commento…</span>
+      <span style={{ fontStyle: "italic", color: "var(--muted2)" }}>Scrivi qualcosa…</span>
     </button>
   );
 }
@@ -73,10 +73,13 @@ export function ReplyBox({ assumptionId, addComment, targetUsername, profile, pa
       <Avatar profile={profile} size={26} />
       <input
         style={{
-          flex: 1, background: "var(--bg2)", border: "1px solid var(--border)",
-          borderRadius: 999, outline: "none", padding: "6px 14px",
+          flex: 1, background: "var(--bg2)", border: "1px solid transparent",
+          borderRadius: 999, outline: "none", padding: "7px 14px",
           fontSize: 13, color: "var(--text)", fontFamily: "inherit",
+          transition: "border-color 0.15s",
         }}
+        onFocus={e => (e.currentTarget.style.borderColor = "var(--border)")}
+        onBlur={e => (e.currentTarget.style.borderColor = "transparent")}
         placeholder={`Rispondi a ${targetUsername}…`}
         value={t}
         onChange={e => setT(e.target.value)}
@@ -92,7 +95,9 @@ export function ReplyBox({ assumptionId, addComment, targetUsername, profile, pa
           style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 18, padding: "0 4px" }}
         >×</button>
       )}
-      <button className="reply-send" onClick={submit}>↑</button>
+      <button className="reply-send" onClick={submit} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, padding: 0 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
     </div>
   );
 }

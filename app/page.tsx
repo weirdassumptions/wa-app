@@ -41,6 +41,8 @@ export default function Home() {
   const [regAvatarPreview, setRegAvatarPreview] = useState<string | null>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
   const regFileRef = useRef<HTMLInputElement>(null);
+  const taRef      = useRef<HTMLTextAreaElement>(null);
+  const [composeFocused, setComposeFocused] = useState(false);
   const [menuOpen, setMenuOpen]                 = useState(false);
   const [deleteConfirm, setDeleteConfirm]       = useState(false);
   const [deleteLoading, setDeleteLoading]       = useState(false);
@@ -64,6 +66,12 @@ export default function Home() {
 
   /* fetchAll: riceve uid come parametro esplicito → nessuna dipendenza da stato → stabile ── */
   const fetchAll = useCallback(async (uid: string | null) => {
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+    const weekStart = monday.toISOString();
+
     const [{ data: aData }, { data: cData }, { data: lData }, { data: pData }] = await Promise.all([
       supabase.from("assumptions").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("comments").select("*").order("created_at", { ascending: true }),
@@ -284,6 +292,7 @@ export default function Home() {
     }
     setText("");
     setIsPosting(false);
+    if (taRef.current) { taRef.current.style.height = "auto"; }
   };
 
   const likePost = useCallback(async (id: string, alreadyLiked: boolean) => {
@@ -425,14 +434,18 @@ export default function Home() {
 
           {/* HEADER MOBILE */}
           <div className="x-header" style={{ position: "relative" }}>
-            <img src="/logo.jpeg" alt="logo" className="header-logo" width={28} height={28} style={{ borderRadius: 7, border: "1.5px solid var(--border)" }} />
-            <div style={{ flex: 1 }}>
-              <div className="header-title" style={{ fontSize: 15 }}>Weird Assumptions</div>
-            </div>
-            <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex", alignItems: "center", color: "var(--muted)" }}>
+            {/* Logo + titolo centrati */}
+            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", flex: 1 }}>
+              <img src="/logo.jpeg" alt="WA" width={30} height={30} style={{ borderRadius: 8, border: "1.5px solid var(--border)", flexShrink: 0 }} />
+              <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 17, color: "var(--text)", letterSpacing: "-0.01em", lineHeight: 1 }}>Weird Assumptions</span>
+            </Link>
+            {/* Dark mode — icona senza bordo */}
+            <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", color: "var(--muted)", borderRadius: 8, transition: "background 0.15s" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}>
               {dark
-                ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               }
             </button>
             {user && profile ? (
@@ -459,7 +472,7 @@ export default function Home() {
           </div>
 
           {/* COMPOSE */}
-          <div className="compose">
+          <div className="compose" style={{ outline: composeFocused ? "2px solid var(--red-ring)" : "2px solid transparent", outlineOffset: -2, transition: "outline-color 0.2s" }}>
             <Avatar profile={profile} size={42} />
             <div className="compose-col">
               {profile ? (
@@ -470,22 +483,29 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="compose-anon">
-                  Stai postando come <strong>Anonimo</strong> —{" "}
-                  <button
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontWeight: 600, fontSize: 13, fontFamily: "inherit", padding: 0 }}
-                    onClick={() => openAuth("login")}
-                  >accedi per usare il tuo profilo</button>
+                  Stai postando come <strong>Anonimo</strong>
+                  <br/>
+                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontWeight: 600, fontSize: 13, fontFamily: "inherit", padding: 0 }} onClick={() => openAuth("register")}>Crea un account</button>{" "}per apparire nel podio
                 </div>
               )}
               <textarea
+                ref={taRef}
                 className="compose-ta"
-                placeholder={isOfficial(profile?.username ?? "") ? "Scrivi un post ufficiale…" : "Scrivi la tua weird assumption…"}
+                placeholder={isOfficial(profile?.username ?? "") ? "Scrivi un post ufficiale…" : "La tua teoria più strana…"}
                 value={text}
-                onChange={e => setText(e.target.value.slice(0, 280))}
+                onChange={e => {
+                  setText(e.target.value.slice(0, 280));
+                  if (taRef.current) { taRef.current.style.height = "auto"; taRef.current.style.height = taRef.current.scrollHeight + "px"; }
+                }}
+                onFocus={() => setComposeFocused(true)}
+                onBlur={() => setComposeFocused(false)}
                 rows={3}
+                style={{ minHeight: 72 }}
               />
               <div className="compose-footer">
-                <CharRing count={text.length} max={280} />
+                <span style={{ fontSize: 12, color: text.length > 240 ? (text.length > 260 ? "var(--red)" : "#b87040") : "var(--muted2)", fontWeight: text.length > 240 ? 600 : 400 }}>
+                  {text.length}/280
+                </span>
                 <button className="btn-post" onClick={addAssumption} disabled={!text.trim() || isPosting}>
                   {isPosting ? "Posting…" : "Posta"}
                 </button>
@@ -493,9 +513,10 @@ export default function Home() {
             </div>
           </div>
 
+          {/* UTENTE TOP MOBILE */}
+          <TopUsers assumptions={assumptions} mobile />
           {/* PODIO MOBILE */}
           {assumptions.length > 0 && <Podium assumptions={assumptions} />}
-          <TopUsers assumptions={assumptions} mobile />
 
           {/* FEED */}
           {assumptions.length === 0 ? (
@@ -520,7 +541,7 @@ export default function Home() {
             <div className="overlay" onClick={() => setModal("none")}>
               <div className="modal" onClick={e => e.stopPropagation()}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                  <img src={OFFICIAL_LOGO} alt="WA" style={{ width: 38, height: 38, borderRadius: 9, objectFit: "cover", border: "1.5px solid var(--red)" }} />
+                  <img src={OFFICIAL_LOGO} alt="WA" style={{ width: 38, height: 38, borderRadius: 9, objectFit: "cover", border: "1.5px solid var(--border)" }} />
                   <div>
                     <div className="modal-title">Weird Assumptions</div>
                     <div style={{ fontSize: 12, color: "var(--muted)" }}>Entra nella community</div>
@@ -537,7 +558,7 @@ export default function Home() {
                         <div className="av-upload" onClick={() => regFileRef.current?.click()}>
                           {regAvatarPreview
                             ? <img src={regAvatarPreview} style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--border)" }} />
-                            : <div className="av" style={{ width: 64, height: 64, background: regColor, fontSize: 24 }}>{regUsername ? initial(regUsername) : "?"}</div>}
+                            : <div className="av" style={{ width: 64, height: 64, background: regColor, fontSize: 24 }}>{regUsername ? initial(regUsername) : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>}</div>}
                           <div className="av-upload-overlay">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                           </div>
@@ -696,11 +717,41 @@ export default function Home() {
   );
 }
 
+/* ─── Countdown al reset del lunedì ─── */
+function useWeeklyCountdown() {
+  const getMs = () => {
+    const now = new Date();
+    const next = new Date(now);
+    const day = now.getDay(); // 0=dom, 1=lun...
+    const daysUntilMon = day === 1 ? 7 : (8 - day) % 7;
+    next.setDate(now.getDate() + daysUntilMon);
+    next.setHours(0, 0, 0, 0);
+    return next.getTime() - now.getTime();
+  };
+
+  const [ms, setMs] = useState(getMs);
+  useEffect(() => {
+    const t = setInterval(() => setMs(getMs()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const d = Math.floor(h / 24);
+
+  if (d > 0) return `${d}g ${h % 24}h ${m}m ${s}s`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  return `${m}m ${s}s`;
+}
+
 /* ─── Podium ─── */
 function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?: boolean }) {
-  const top3 = [...assumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 3);
-  if (top3.length === 0) return null;
-
+  const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); monday.setHours(0,0,0,0);
+  const weekStart = monday.getTime();
+  const weekAssumptions = assumptions.filter(a => new Date(a.created_at.endsWith("Z") ? a.created_at : a.created_at + "Z").getTime() >= weekStart);
+  const top3 = [...weekAssumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 3);
+  const countdown  = useWeeklyCountdown();
   const order      = [top3[1], top3[0], top3[2]].filter(Boolean);
   const colors     = ["#a0a0b0", "#c4a436", "#b87040"];
   const ranks      = [2, 1, 3];
@@ -729,27 +780,37 @@ function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?
 
   if (sidebar) {
     return (
-      <div className="podium-wrap sidebar-mode">
-        <div className="podium-label">🔥 Top post della settimana</div>
-        <div className="podium-grid sidebar-mode">
-          {top3.map((a, i) => (
-            <div key={a.id} className="podium-col sidebar-mode">
-              <div style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 6, background: `${colors[i]}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: colors[i] }}>{i + 1}</span>
+      <div className="right-widget" style={{ padding: "14px 14px 10px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 15, color: "var(--text)" }}>🔥 Top post</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "var(--red)", background: "var(--red-pale)", padding: "2px 8px", borderRadius: 999 }}>⏳ {countdown}</span>
+        </div>
+        {/* Lista */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {top3.map((a, i) => { const sc = ["#c4a436","#a0a0b0","#b87040"][i]; return (
+            <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 8px", borderRadius: 10, transition: "background 0.15s", cursor: "default" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--border2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+              {/* Numero */}
+              <div style={{ width: 20, height: 20, borderRadius: 6, background: `${sc}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: sc }}>{i + 1}</span>
               </div>
+              {/* Avatar + contenuto */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
-                  <UAv username={a.username} size={16} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayFor(a.username, a.display_name)}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                  <UAv username={a.username} size={18} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayFor(a.username, a.display_name)}</span>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.35, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{a.text}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 3 }}>
-                  <Heart color={colors[i]} size={10} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: colors[i] }}>{a.likes || 0}</span>
-                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{a.text}</div>
+              </div>
+              {/* Likes */}
+              <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0, marginTop: 1 }}>
+                <Heart color={sc} size={11} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: sc }}>{a.likes || 0}</span>
               </div>
             </div>
-          ))}
+          );})}
         </div>
       </div>
     );
@@ -757,7 +818,10 @@ function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?
 
   return (
     <div className="podium-wrap">
-      <div className="podium-label">🔥 Top post della settimana</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, padding: "0 4px" }}>
+        <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 16, color: "var(--text)" }}>🔥 Top post</span>
+        <span style={{ fontSize: 10, fontWeight: 600, color: "var(--red)", background: "var(--red-pale)", padding: "2px 8px", borderRadius: 999 }}>⏳ {countdown}</span>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0, alignItems: "end", padding: "0 4px" }}>
         {order.map((a, i) => {
           const rank    = ranks[i];
@@ -770,8 +834,9 @@ function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?
               <div style={{
                 width: "100%",
                 background: `linear-gradient(to bottom, var(--bg2), ${color}18)`,
-                border: `1px solid ${color}50`,
-                borderBottom: "none",
+                borderTop: `1px solid ${color}50`,
+                borderLeft: `1px solid ${color}50`,
+                borderRight: `1px solid ${color}50`,
                 borderRadius: "14px 14px 0 0",
                 padding: isFirst ? "22px 8px 10px" : "10px 6px 10px",
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
@@ -801,8 +866,10 @@ function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?
               <div style={{
                 width: "100%", height: barH,
                 background: `linear-gradient(to bottom, ${color}30, ${color}18)`,
-                border: `1px solid ${color}50`,
                 borderTop: `2px solid ${color}60`,
+                borderLeft: `1px solid ${color}50`,
+                borderRight: `1px solid ${color}50`,
+                borderBottom: `1px solid ${color}50`,
                 borderRadius: "0 0 8px 8px",
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}>
@@ -819,7 +886,8 @@ function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?
 
 /* ─── Top Utenti della settimana ─── */
 function TopUsers({ assumptions, mobile = false }: { assumptions: any[]; sidebar?: boolean; mobile?: boolean }) {
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); monday.setHours(0,0,0,0);
+  const weekAgo = monday.getTime();
   const top = Object.values(
     assumptions
       .filter(a => a.username !== "anonimo" && new Date(a.created_at.endsWith("Z") ? a.created_at : a.created_at + "Z").getTime() > weekAgo)

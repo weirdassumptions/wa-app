@@ -96,6 +96,7 @@ export default function ProfilePage() {
   const myProfileRef              = useRef<Profile | null>(null);
   const [isAdmin, setIsAdmin]     = useState(false);
   const [menuOpen, setMenuOpen]   = useState(false);
+  const [zoomAvatar, setZoomAvatar] = useState(false);
 
   /* ── dark mode ── */
   const [dark, setDark] = useState(() => {
@@ -356,20 +357,23 @@ export default function ProfilePage() {
           {/* MOBILE HEADER */}
           <div className="x-header" style={{ position: "relative" }}>
             {/* Freccia indietro */}
-            <button onClick={() => router.push("/")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text)", padding: "4px 6px" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6" /></svg>
+            <button onClick={() => router.push("/")} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", display: "flex", alignItems: "center", color: "var(--text)", flexShrink: 0, borderRadius: 8, transition: "background 0.15s" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
-            {/* Nome profilo visualizzato */}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
-                {displayFor(pageProfile!.username, pageProfile!.display_name)}
-              </div>
-            </div>
+            {/* Logo + titolo */}
+            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", flex: 1 }}>
+              <img src="/logo.jpeg" alt="WA" width={30} height={30} style={{ borderRadius: 8, border: "1.5px solid var(--border)", flexShrink: 0 }} />
+              <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 17, color: "var(--text)", letterSpacing: "-0.01em", lineHeight: 1 }}>Weird Assumptions</span>
+            </Link>
             {/* Bottone dark mode — identico alla home */}
-            <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 999, cursor: "pointer", padding: "5px 8px", display: "flex", alignItems: "center", color: "var(--muted)" }}>
+            <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", color: "var(--muted)", borderRadius: 8, transition: "background 0.15s" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}>
               {dark
-                ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               }
             </button>
             {user && myProfile ? (
@@ -406,7 +410,10 @@ export default function ProfilePage() {
                 : avatarGrad(pageProfile!.username),
             }} />
             <div className="profile-av-wrap">
-              <div style={{ border: "3px solid var(--surface)", borderRadius: "50%", display: "inline-block" }}>
+              <div
+                style={{ border: "3px solid var(--surface)", borderRadius: "50%", display: "inline-block", cursor: pageProfile!.avatar_url ? "zoom-in" : "default" }}
+                onClick={() => pageProfile!.avatar_url && setZoomAvatar(true)}
+              >
                 <UAv username={pageProfile!.username} size={72} avatarUrl={pageProfile!.avatar_url} avatarColor={pageProfile!.avatar_color} />
               </div>
             </div>
@@ -517,6 +524,27 @@ export default function ProfilePage() {
             <button className="btn-post" onClick={saveProfile} disabled={editSaving}>{editSaving ? "Salvataggio…" : "Salva profilo"}</button>
             <button className="modal-link" onClick={() => setEditModal(false)}>Annulla</button>
           </div>
+        </div>
+      )}
+      {/* ── LIGHTBOX AVATAR ── */}
+      {zoomAvatar && pageProfile?.avatar_url && (
+        <div
+          onClick={() => setZoomAvatar(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+        >
+          {/* X in alto a destra */}
+          <button
+            onClick={() => setZoomAvatar(false)}
+            style={{ position: "absolute", top: 16, right: 16, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <img
+            src={pageProfile.avatar_url}
+            alt="avatar"
+            onClick={e => e.stopPropagation()}
+            style={{ width: "min(80vw, 400px)", height: "min(80vw, 400px)", borderRadius: "50%", objectFit: "cover", border: "4px solid rgba(255,255,255,0.15)", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}
+          />
         </div>
       )}
     </>
