@@ -43,6 +43,10 @@ export default function Home() {
   const regFileRef = useRef<HTMLInputElement>(null);
   const taRef      = useRef<HTMLTextAreaElement>(null);
   const [composeFocused, setComposeFocused] = useState(false);
+  const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+  const [waPlaceholder, setWaPlaceholder] = useState("");
+  useEffect(() => { setWaPlaceholder(WA_PLACEHOLDERS[Math.floor(Math.random() * WA_PLACEHOLDERS.length)]); }, []);
+
   const [menuOpen, setMenuOpen]                 = useState(false);
   const [deleteConfirm, setDeleteConfirm]       = useState(false);
   const [deleteLoading, setDeleteLoading]       = useState(false);
@@ -379,7 +383,7 @@ export default function Home() {
         {/* ── SIDEBAR DESKTOP ── */}
         <aside className="sidebar">
           <Link href="/" className="sidebar-logo">
-            <img src="/logo.jpeg" alt="WA" width={36} height={36} />
+            <img src="/logo.jpeg" alt="WA" width={36} height={36} style={{ borderRadius: 9, border: "1.5px solid var(--border)", flexShrink: 0 }} />
             <span className="sidebar-logo-text">Weird<br/>Assumptions</span>
           </Link>
 
@@ -435,9 +439,12 @@ export default function Home() {
           {/* HEADER MOBILE */}
           <div className="x-header" style={{ position: "relative" }}>
             {/* Logo + titolo centrati */}
-            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", flex: 1 }}>
-              <img src="/logo.jpeg" alt="WA" width={30} height={30} style={{ borderRadius: 8, border: "1.5px solid var(--border)", flexShrink: 0 }} />
-              <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 17, color: "var(--text)", letterSpacing: "-0.01em", lineHeight: 1 }}>Weird Assumptions</span>
+            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flex: 1 }}>
+              <img src="/logo.jpeg" alt="WA" width={36} height={36} style={{ borderRadius: 9, border: "1.5px solid var(--border)", flexShrink: 0 }} />
+              <div style={{ lineHeight: 1.15 }}>
+                <div style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 800, fontSize: 15, color: "var(--text)", letterSpacing: "-0.02em" }}>Weird</div>
+                <div style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 800, fontSize: 15, color: "var(--text)", letterSpacing: "-0.02em" }}>Assumptions</div>
+              </div>
             </Link>
             {/* Dark mode — icona senza bordo */}
             <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", color: "var(--muted)", borderRadius: 8, transition: "background 0.15s" }}
@@ -483,7 +490,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="compose-anon">
-                  Stai postando come <strong>Anonimo</strong>
+                  Stai pubblicando come <strong>Anonimo</strong>
                   <br/>
                   <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontWeight: 600, fontSize: 13, fontFamily: "inherit", padding: 0 }} onClick={() => openAuth("register")}>Crea un account</button>{" "}per apparire nel podio
                 </div>
@@ -491,7 +498,7 @@ export default function Home() {
               <textarea
                 ref={taRef}
                 className="compose-ta"
-                placeholder={isOfficial(profile?.username ?? "") ? "Scrivi un post ufficiale…" : "La tua teoria più strana…"}
+                placeholder={isOfficial(profile?.username ?? "") ? "Scrivi un post ufficiale…" : waPlaceholder}
                 value={text}
                 onChange={e => {
                   setText(e.target.value.slice(0, 280));
@@ -507,7 +514,7 @@ export default function Home() {
                   {text.length}/280
                 </span>
                 <button className="btn-post" onClick={addAssumption} disabled={!text.trim() || isPosting}>
-                  {isPosting ? "Posting…" : "Posta"}
+                  {isPosting ? "Pubblicando…" : "Pubblica WA"}
                 </button>
               </div>
             </div>
@@ -522,7 +529,7 @@ export default function Home() {
           {assumptions.length === 0 ? (
             <div className="empty">
               <div className="empty-icon">👀</div>
-              <div className="empty-title">Nessuna assumption ancora</div>
+              <div className="empty-title">Nessuna WA ancora</div>
               <div>Sii il primo a rompere il ghiaccio.</div>
             </div>
           ) : assumptions.map(a => (
@@ -533,6 +540,7 @@ export default function Home() {
               onLike={likePost} onDelete={deletePost} onPin={pinPost}
               onDeleteComment={deleteComment} onAddComment={addComment}
               onEditPost={editPost} onEditComment={editComment}
+              openCommentId={openCommentId} setOpenCommentId={setOpenCommentId}
             />
           ))}
 
@@ -722,15 +730,16 @@ function useWeeklyCountdown() {
   const getMs = () => {
     const now = new Date();
     const next = new Date(now);
-    const day = now.getDay(); // 0=dom, 1=lun...
+    const day = now.getDay();
     const daysUntilMon = day === 1 ? 7 : (8 - day) % 7;
     next.setDate(now.getDate() + daysUntilMon);
     next.setHours(0, 0, 0, 0);
     return next.getTime() - now.getTime();
   };
 
-  const [ms, setMs] = useState(getMs);
+  const [ms, setMs] = useState(0);
   useEffect(() => {
+    setMs(getMs());
     const t = setInterval(() => setMs(getMs()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -744,6 +753,21 @@ function useWeeklyCountdown() {
   if (h > 0) return `${h}h ${m}m ${s}s`;
   return `${m}m ${s}s`;
 }
+
+
+/* ─── Placeholder casuali compose ─── */
+const WA_PLACEHOLDERS = [
+  "So che ci stai pensando… scrivilo.",
+  "Non avrai mica paura di scriverlo?",
+  "Facci sapere cosa non ti fa dormire la notte.",
+  "Be free. Just say it.",
+  "La tua teoria più strana. Vai.",
+  "Cosa pensi e non dici mai?",
+  "Scrivilo prima che ti passi.",
+  "Il mondo ha bisogno di sapere.",
+  "Questa è una zona franca. Scrivi.",
+  "Scommettiamo che qualcuno la pensa come te?",
+];
 
 /* ─── Podium ─── */
 function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?: boolean }) {

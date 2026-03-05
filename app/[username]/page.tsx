@@ -96,6 +96,7 @@ export default function ProfilePage() {
   const myProfileRef              = useRef<Profile | null>(null);
   const [isAdmin, setIsAdmin]     = useState(false);
   const [menuOpen, setMenuOpen]   = useState(false);
+  const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [zoomAvatar, setZoomAvatar] = useState(false);
 
   /* ── dark mode ── */
@@ -311,8 +312,8 @@ export default function ProfilePage() {
         {/* ── SIDEBAR ── */}
         <aside className="sidebar">
           <Link href="/" className="sidebar-logo">
-            <img src={OFFICIAL_LOGO} alt="WA" width={36} height={36} style={{ borderRadius: 8, border: "1.5px solid var(--border)" }} />
-            <span className="sidebar-logo-text">Weird<br />Assumptions</span>
+            <img src="/logo.jpeg" alt="WA" width={36} height={36} style={{ borderRadius: 9, border: "1.5px solid var(--border)", flexShrink: 0 }} />
+            <span className="sidebar-logo-text">Weird<br/>Assumptions</span>
           </Link>
           <Link href="/" className="nav-item">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" /></svg>
@@ -426,8 +427,8 @@ export default function ProfilePage() {
               <div className="profile-handle">@{handleFor(pageProfile!.username)}</div>
               {pageProfile!.bio && <div className="profile-bio">{pageProfile!.bio}</div>}
               <div className="profile-stats">
-                <div className="profile-stat"><span className="stat-n">{assumptions.length}</span><span className="stat-l">post</span></div>
-                <div className="profile-stat"><span className="stat-n">{totalLikes}</span><span className="stat-l">likes ricevuti</span></div>
+                <div className="profile-stat"><span className="stat-n">{assumptions.length}</span><span className="stat-l">WA</span></div>
+                <div className="profile-stat"><span className="stat-n">{totalLikes}</span><span className="stat-l">likes</span></div>
               </div>
               {isOwnProfile && (
                 <button
@@ -457,6 +458,7 @@ export default function ProfilePage() {
             ) : assumptions.map(a => (
               <TweetCard
                 key={a.id} a={a}
+                openCommentId={openCommentId} setOpenCommentId={setOpenCommentId}
                 comments={commentsByPost[a.id] ?? []}
                 isAdmin={isAdmin} profile={myProfile}
                 onLike={likePost} onDelete={deletePost} onPin={noOp}

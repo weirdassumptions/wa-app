@@ -43,7 +43,7 @@ export function AddCommentBox({ profile, onOpen }: {
       }}
     >
       <Avatar profile={profile} size={24} />
-      <span style={{ fontStyle: "italic", color: "var(--muted2)" }}>Scrivi qualcosa…</span>
+      <span style={{ fontStyle: "italic", color: "var(--muted2)" }}>Commenta questa WA…</span>
     </button>
   );
 }
@@ -274,7 +274,7 @@ export function CommentNode({
 export const TweetCard = memo(function TweetCard({
   a, comments, isAdmin, profile, onLike, onDelete, onPin,
   onDeleteComment, onAddComment, onEditPost, onEditComment,
-  currentUsername = "",
+  currentUsername = "", openCommentId, setOpenCommentId,
 }: {
   a: Assumption;
   comments: Comment[];
@@ -288,12 +288,24 @@ export const TweetCard = memo(function TweetCard({
   onEditPost: (id: string, text: string) => void;
   onEditComment: (id: string, text: string) => void;
   currentUsername?: string;
+  openCommentId?: string | null;
+  setOpenCommentId?: (id: string | null) => void;
 }) {
   useTick();
-  const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(a.text);
   const [activeReply, setActiveReply] = useState<string | null>(null);
+  const open = openCommentId === a.id;
+  const setOpen = (v: boolean) => { setOpenCommentId?.(v ? a.id : null); if (!v) setActiveReply(null); };
+
+  useEffect(() => {
+    if (openCommentId !== a.id) setActiveReply(null);
+  }, [openCommentId, a.id]);
+
+  // Chiudi reply box quando la sezione commenti si chiude
+  useEffect(() => {
+    if (!open) setActiveReply(null);
+  }, [open]);
   const roots = comments.filter((c: Comment) => !c.parent_id);
 
   /* Chiude la reply box e aggiunge il commento */
@@ -313,7 +325,7 @@ export const TweetCard = memo(function TweetCard({
         </div>
       )}
 
-      <div className="tweet-row" onClick={() => setOpen(o => !o)}>
+      <div className="tweet-row" onClick={() => setOpen(!open)}>
         {/* Avatar + thread line */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
           {a.username !== "anonimo" && a.username !== currentUsername ? (
@@ -388,7 +400,7 @@ export const TweetCard = memo(function TweetCard({
 
           {/* Action bar */}
           <div className="abar">
-            <button className="act cmt" onClick={() => setOpen(o => !o)}>
+            <button className="act cmt" onClick={() => setOpen(!open)}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
@@ -484,7 +496,7 @@ export const TweetCard = memo(function TweetCard({
               addComment={handleAddComment}
               targetUsername={displayFor(a.username, a.display_name)}
               profile={profile}
-              onOpen={() => setActiveReply("main")}
+              onOpen={() => { setOpenCommentId?.(a.id); setActiveReply("main"); }}
             />
           )}
 
