@@ -50,6 +50,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const navigateToPost = (id: string) => {
@@ -147,6 +148,7 @@ export default function Home() {
 
     const profileMap: Record<string, any> = {};
     pData?.forEach(p => { profileMap[p.username.trim()] = p; });
+    if (pData) setAllProfiles(pData);
 
     if (aData) {
       setAssumptions(aData.map(a => {
@@ -189,7 +191,11 @@ export default function Home() {
 
   /* ── auth listener: [] come deps — si iscrive UNA SOLA VOLTA ── */
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e: any, session: any) => {
+      if (_e === "TOKEN_REFRESHED" && !session) {
+        supabase.auth.signOut();
+        return;
+      }
       if (session?.user) {
         userRef.current = session.user;
         setUser(session.user);
@@ -424,21 +430,15 @@ export default function Home() {
     }]);
   }, []); // profileRef è stabile
 
-  const allUsers = useMemo(() => {
-    const map: Record<string, any> = {};
-    for (const a of assumptions) {
-      if (a.username && a.username !== "anonimo" && !map[a.username]) {
-        map[a.username] = { username: a.username, display_name: a.display_name, avatar_url: a.avatar_url, avatar_color: a.avatar_color, is_verified: a.is_verified };
-      }
-    }
-    return Object.values(map);
-  }, [assumptions]);
-
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return allUsers.filter(u => u.username.toLowerCase().includes(q) || (u.display_name || "").toLowerCase().includes(q)).slice(0, 6);
-  }, [searchQuery, allUsers]);
+    return allProfiles
+      .filter(u => u.username && u.username !== "anonimo" && (
+        u.username.toLowerCase().includes(q) || (u.display_name || "").toLowerCase().includes(q)
+      ))
+      .slice(0, 6);
+  }, [searchQuery, allProfiles]);
 
   const commentsByPost = useMemo(() => {
     const map: Record<string, typeof comments> = {};
