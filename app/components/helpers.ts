@@ -28,6 +28,7 @@ export type Comment = {
   parent_id: string | null;
   avatar_url?: string;
   avatar_color?: string;
+  edited?: boolean;
 };
 
 export type Assumption = {
@@ -41,6 +42,8 @@ export type Assumption = {
   likes: number;
   alreadyLiked: boolean;
   created_at: string;
+  pinned?: boolean;
+  edited?: boolean;
 };
 
 /* ─── Gradient helpers ─── */
@@ -64,10 +67,13 @@ export const displayFor = (username: string, display_name?: string) =>
 export const handleFor = (username: string) =>
   isOfficial(username) ? OFFICIAL_HANDLE : username.toLowerCase().replace(/\s+/g, "_");
 
+/* fmt: gestisce date con e senza Z finale (Supabase a volte omette il suffisso UTC) */
 export const fmt = (d: string) => {
-  const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
-  if (s < 60) return `${s}s fa`;
+  const date = d.endsWith("Z") ? d : d + "Z";
+  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (s < 60) return "adesso";
   if (s < 3600) return `${Math.floor(s / 60)}m fa`;
   if (s < 86400) return `${Math.floor(s / 3600)}h fa`;
-  return new Date(d).toLocaleDateString("it-IT");
+  if (s < 604800) return `${Math.floor(s / 86400)}g fa`;
+  return new Date(date).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
 };
