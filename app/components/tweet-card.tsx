@@ -427,25 +427,26 @@ export const TweetCard = memo(function TweetCard({
           </div>
 
           {editing ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }} onClick={e => e.stopPropagation()}>
               <textarea
                 value={editText}
+                autoFocus
                 onChange={e => setEditText(e.target.value.slice(0, 280))}
                 rows={3}
                 style={{
-                  background: "var(--bg)", border: "1px solid var(--red)", borderRadius: 10,
-                  padding: "8px 12px", fontSize: 14, color: "var(--text)",
+                  background: "none", border: "none", borderBottom: "1px solid var(--border2)",
+                  padding: "4px 0", fontSize: 15, color: "var(--text)", lineHeight: 1.55,
                   fontFamily: "inherit", outline: "none", resize: "none", width: "100%",
                 }}
               />
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button
                   onClick={() => { onEditPost(a.id, editText); setEditing(false); }}
-                  style={{ background: "var(--red)", border: "none", borderRadius: 999, color: "#fff", fontSize: 12, fontWeight: 600, padding: "5px 14px", cursor: "pointer", fontFamily: "inherit" }}
+                  style={{ background: "var(--red)", border: "none", borderRadius: 999, color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}
                 >Salva</button>
                 <button
                   onClick={() => { setEditing(false); setEditText(a.text); }}
-                  style={{ background: "none", border: "1px solid var(--border)", borderRadius: 999, color: "var(--muted)", fontSize: 12, fontWeight: 600, padding: "5px 14px", cursor: "pointer", fontFamily: "inherit" }}
+                  style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
                 >Annulla</button>
               </div>
             </div>
@@ -475,32 +476,19 @@ export const TweetCard = memo(function TweetCard({
               {a.likes > 0 && <span>{a.likes}</span>}
             </button>
 
-            {/* Modifica/elimina autore (non admin) */}
-            {profile && profile.username === a.username && !isAdmin && (
-              <>
-                <button
-                  className="act"
-                  style={{ color: "var(--muted)" }}
-                  onClick={e => { e.stopPropagation(); setEditing(true); }}
-                  title="Modifica"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </button>
-                <button
-                  className="act del"
-                  onClick={e => { e.stopPropagation(); onDelete(a.id); }}
-                  title="Elimina"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6l-1 14H6L5 6"/>
-                    <path d="M10 11v6M14 11v6M9 6V4h6v2"/>
-                  </svg>
-                </button>
-              </>
+            {/* Modifica autore */}
+            {profile && profile.username === a.username && (
+              <button
+                className="act"
+                style={{ color: "var(--muted)" }}
+                onClick={e => { e.stopPropagation(); setEditing(true); }}
+                title="Modifica"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
             )}
 
             {/* Azioni admin */}

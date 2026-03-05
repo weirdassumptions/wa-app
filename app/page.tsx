@@ -46,6 +46,32 @@ export default function Home() {
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+
+  const navigateToPost = (id: string) => {
+    const el = document.getElementById(`post-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setOpenCommentId(id);
+      // Applica highlight sul tweet-row dentro il wrapper
+      const row = el.querySelector(".tweet-row") as HTMLElement | null;
+      const target = row || el;
+      target.style.transition = "background 0s";
+      target.style.background = "rgba(212,90,74,0.3)";
+      setTimeout(() => {
+        target.style.transition = "background 2s ease-out";
+        target.style.background = "var(--surface)";
+      }, 50);
+      setTimeout(() => { target.style.background = ""; target.style.transition = ""; }, 2300);
+    } else {
+      window.location.href = `/?open=${id}`;
+    }
+  };
+
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 900);
     check();
@@ -53,8 +79,25 @@ export default function Home() {
     return () => window.removeEventListener("resize", check);
   }, []);
   useEffect(() => {
-    const tag = new URLSearchParams(window.location.search).get("tag");
+    const params = new URLSearchParams(window.location.search);
+    const tag = params.get("tag");
     if (tag) setActiveHashtag(tag);
+    const open = params.get("open");
+    if (open) {
+      setOpenCommentId(open);
+      setTimeout(() => {
+        const el = document.getElementById(`post-${open}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          const row = el.querySelector(".tweet-row") as HTMLElement | null;
+          const target = row || el;
+          target.style.transition = "background 0s";
+          target.style.background = "rgba(212,90,74,0.3)";
+          setTimeout(() => { target.style.transition = "background 2s ease-out"; target.style.background = "var(--surface)"; }, 50);
+          setTimeout(() => { target.style.background = ""; target.style.transition = ""; }, 2300);
+        }
+      }, 500);
+    }
   }, []);
   const [waPlaceholder, setWaPlaceholder] = useState("");
   useEffect(() => { setWaPlaceholder(WA_PLACEHOLDERS[Math.floor(Math.random() * WA_PLACEHOLDERS.length)]); }, []);
@@ -374,6 +417,22 @@ export default function Home() {
     }]);
   }, []); // profileRef è stabile
 
+  const allUsers = useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const a of assumptions) {
+      if (a.username && a.username !== "anonimo" && !map[a.username]) {
+        map[a.username] = { username: a.username, display_name: a.display_name, avatar_url: a.avatar_url, avatar_color: a.avatar_color, is_verified: a.is_verified };
+      }
+    }
+    return Object.values(map);
+  }, [assumptions]);
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return allUsers.filter(u => u.username.toLowerCase().includes(q) || (u.display_name || "").toLowerCase().includes(q)).slice(0, 6);
+  }, [searchQuery, allUsers]);
+
   const commentsByPost = useMemo(() => {
     const map: Record<string, typeof comments> = {};
     for (const c of comments) {
@@ -397,6 +456,39 @@ export default function Home() {
           <Link href="/" className="sidebar-logo">
             <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Weird Assumptions" height={44} style={{ objectFit: "contain", flexShrink: 0, maxWidth: 200 }} />
           </Link>
+
+          {/* Ricerca utenti */}
+          <div style={{ position: "relative", padding: "8px 0 4px", zIndex: 200 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg2)", borderRadius: 999, padding: "7px 14px" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                placeholder="Cerca utenti…"
+                style={{ background: "none", border: "none", outline: "none", fontSize: 13, color: "var(--text)", fontFamily: "inherit", width: "100%" }}
+              />
+              {searchQuery && <button onClick={() => { setSearchQuery(""); setSearchOpen(false); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>}
+            </div>
+            {searchOpen && searchResults.length > 0 && (
+              <div style={{ position: "absolute", top: "calc(100% - 2px)", left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, overflow: "hidden" }}>
+                {searchResults.map(u => (
+                  <Link key={u.username} href={`/${u.username}`} onClick={() => { setSearchQuery(""); setSearchOpen(false); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", textDecoration: "none", transition: "background 0.12s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg2)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <UAv username={u.username} size={32} avatarUrl={u.avatar_url} avatarColor={u.avatar_color} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{displayFor(u.username, u.display_name)}</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>@{u.username}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Link href="/" className="nav-item active">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
@@ -449,10 +541,45 @@ export default function Home() {
 
           {/* HEADER MOBILE */}
           <div className="x-header" style={{ position: "relative" }}>
-            {/* Logo + titolo centrati */}
-            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flex: 1 }}>
-              <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Weird Assumptions" height={32} style={{ objectFit: "contain", maxWidth: 160 }} />
-            </Link>
+            {mobileSearchOpen ? (
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--bg2)", borderRadius: 999, padding: "6px 14px" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Cerca utenti…"
+                  style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 14, color: "var(--text)", fontFamily: "inherit" }}
+                />
+                <button onClick={() => { setMobileSearchOpen(false); setSearchQuery(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 18, padding: 0 }}>×</button>
+              </div>
+            ) : (
+              <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flex: 1 }}>
+                <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Weird Assumptions" height={32} style={{ objectFit: "contain", maxWidth: 160 }} />
+              </Link>
+            )}
+            {/* Lente ricerca */}
+            {!mobileSearchOpen && (
+              <button onClick={() => setMobileSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: "var(--muted)", display: "flex", alignItems: "center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </button>
+            )}
+            {/* Risultati ricerca mobile - overlay */}
+            {mobileSearchOpen && searchResults.length > 0 && (
+              <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--surface)", borderBottom: "1px solid var(--border2)", zIndex: 300, boxShadow: "0 8px 24px rgba(0,0,0,0.1)" }}>
+                {searchResults.map(u => (
+                  <Link key={u.username} href={`/${u.username}`} onClick={() => { setMobileSearchOpen(false); setSearchQuery(""); }}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", textDecoration: "none", borderBottom: "1px solid var(--border2)" }}
+                  >
+                    <UAv username={u.username} size={36} avatarUrl={u.avatar_url} avatarColor={u.avatar_color} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{displayFor(u.username, u.display_name)}</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>@{u.username}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
             {/* Dark mode — icona senza bordo */}
             <button onClick={() => setDark(d => !d)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", color: "var(--muted)", borderRadius: 8, transition: "background 0.15s" }}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--bg2)")}
@@ -527,10 +654,12 @@ export default function Home() {
             </div>
           </div>
 
+
+
           {/* UTENTE TOP MOBILE */}
           <TopUsers assumptions={assumptions} mobile />
           {/* PODIO MOBILE */}
-          {assumptions.length > 0 && <Podium assumptions={assumptions} />}
+          {assumptions.length > 0 && <Podium assumptions={assumptions} onPostClick={navigateToPost} />}
 
           {/* HASHTAG FILTER BANNER */}
           {activeHashtag && (
@@ -562,8 +691,10 @@ export default function Home() {
             .filter(a => !activeHashtag || a.text.toLowerCase().includes(activeHashtag))
             .flatMap((a, i) => {
               const card = (
+                <div key={a.id} id={`post-${a.id}`}>
+
                 <TweetCard
-                  key={a.id} a={a}
+                  key={`tc-${a.id}`} a={a}
                   comments={commentsByPost[a.id] ?? []}
                   isAdmin={isAdmin} profile={profile}
                   onLike={likePost} onDelete={deletePost} onPin={pinPost}
@@ -572,6 +703,7 @@ export default function Home() {
                   openCommentId={openCommentId} setOpenCommentId={setOpenCommentId}
                   onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)}
                 />
+                </div>
               );
               if (i === 3 && !activeHashtag && isMobile) {
                 return [card, <TrendingHashtagsMobile key="trending-mobile" assumptions={assumptions} onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)} activeHashtag={activeHashtag} />];
@@ -753,7 +885,7 @@ export default function Home() {
 
         {/* ── COLONNA DESTRA DESKTOP ── */}
         <aside className="right-col">
-          <Podium assumptions={assumptions} sidebar />
+          <Podium assumptions={assumptions} sidebar onPostClick={navigateToPost} />
           <TrendingHashtags assumptions={assumptions} activeHashtag={activeHashtag} onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)} />
 
         </aside>
@@ -880,7 +1012,7 @@ function TrendingHashtags({ assumptions, activeHashtag, onHashtag }: {
 }
 
 /* ─── Podium ─── */
-function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?: boolean }) {
+function Podium({ assumptions, sidebar = false, onPostClick }: { assumptions: any[]; sidebar?: boolean; onPostClick?: (id: string) => void; }) {
   const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); monday.setHours(0,0,0,0);
   const weekStart = monday.getTime();
   const weekAssumptions = assumptions.filter(a => new Date(a.created_at.endsWith("Z") ? a.created_at : a.created_at + "Z").getTime() >= weekStart);
@@ -923,7 +1055,8 @@ function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?
         {/* Lista */}
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {top3.map((a, i) => { const sc = ["#c4a436","#a0a0b0","#b87040"][i]; return (
-            <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 8px", borderRadius: 10, transition: "background 0.15s", cursor: "default" }}
+            <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 8px", borderRadius: 10, transition: "background 0.15s", cursor: "pointer" }}
+              onClick={() => onPostClick?.(a.id)}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--border2)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
               {/* Numero */}
@@ -963,7 +1096,8 @@ function Podium({ assumptions, sidebar = false }: { assumptions: any[]; sidebar?
           const barH    = [80, 110, 55][i];
           const isFirst = rank === 1;
           return (
-            <div key={a.id} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div key={a.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer" }}
+              onClick={() => onPostClick?.(a.id)}>
               {/* Card */}
               <div style={{
                 width: "100%",
