@@ -241,7 +241,7 @@ export function CommentNode({
           )}
 
           <button className="c-reply-btn" onClick={() => setReplying(!replying)}>
-            {replying ? "Annulla" : "↩ Rispondi"}
+            {replying ? "Annulla" : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{marginRight:3,verticalAlign:"middle"}}><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>Rispondi</>}
           </button>
         </div>
 
@@ -332,6 +332,7 @@ export const TweetCard = memo(function TweetCard({
   a, comments, isAdmin, profile, onLike, onDelete, onPin,
   onDeleteComment, onAddComment, onEditPost, onEditComment,
   currentUsername = "", openCommentId, setOpenCommentId, onHashtag,
+  watching = [], onToggleWatch,
 }: {
   a: Assumption;
   comments: Comment[];
@@ -348,6 +349,8 @@ export const TweetCard = memo(function TweetCard({
   openCommentId?: string | null;
   setOpenCommentId?: (id: string | null) => void;
   onHashtag?: (tag: string) => void;
+  watching?: string[];
+  onToggleWatch?: (username: string) => void;
 }) {
   useTick();
   const [editing, setEditing] = useState(false);
@@ -417,6 +420,24 @@ export const TweetCard = memo(function TweetCard({
                   </span>
                 )}
                 {a.is_verified && <Badge size={15} />}
+                {onToggleWatch && a.username !== "anonimo" && a.username !== currentUsername && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onToggleWatch(a.username); }}
+                    title={watching.includes(a.username) ? "Smetti di osservare" : "Osserva"}
+                    style={{
+                      background: watching.includes(a.username) ? "var(--red-pale, rgba(212,90,74,0.1))" : "var(--bg2)",
+                      border: "none", cursor: "pointer",
+                      padding: "2px 8px", borderRadius: 999,
+                      fontSize: 11, fontWeight: 600, lineHeight: 1.4,
+                      color: watching.includes(a.username) ? "var(--red)" : "var(--muted)",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "0.75"; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
+                  >
+                    {watching.includes(a.username) ? "👁 osservato" : "+ osserva"}
+                  </button>
+                )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <span className="tw-handle">@{handleFor(a.username)}</span>

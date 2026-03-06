@@ -51,6 +51,8 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
+  const [watching, setWatching] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"home"|"osservati">("home");
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const navigateToPost = (id: string) => {
@@ -139,16 +141,18 @@ export default function Home() {
     monday.setHours(0, 0, 0, 0);
     const weekStart = monday.toISOString();
 
-    const [{ data: aData }, { data: cData }, { data: lData }, { data: pData }] = await Promise.all([
+    const [{ data: aData }, { data: cData }, { data: lData }, { data: pData }, { data: wData }] = await Promise.all([
       supabase.from("assumptions").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("comments").select("*").order("created_at", { ascending: true }),
       supabase.from("likes").select("assumption_id,user_id"),
       supabase.from("profiles").select("username,display_name,avatar_url,avatar_color,is_verified"),
+      uid ? supabase.from("watching").select("watched_username").eq("watcher_id", uid) : Promise.resolve({ data: [] }),
     ]);
 
     const profileMap: Record<string, any> = {};
     pData?.forEach(p => { profileMap[p.username.trim()] = p; });
     if (pData) setAllProfiles(pData);
+    if (wData) setWatching(wData.map((w: any) => w.watched_username));
 
     if (aData) {
       setAssumptions(aData.map(a => {
@@ -449,6 +453,19 @@ export default function Home() {
     return map;
   }, [comments]);
 
+
+  const toggleWatch = async (username: string) => {
+    if (!user) return;
+    const isWatching = watching.includes(username);
+    if (isWatching) {
+      await supabase.from("watching").delete().eq("watcher_id", user.id).eq("watched_username", username);
+      setWatching(w => w.filter(u => u !== username));
+    } else {
+      await supabase.from("watching").insert({ watcher_id: user.id, watched_username: username });
+      setWatching(w => [...w, username]);
+    }
+  };
+
   const openAuth = (tab: "login" | "register" = "login") => {
     setAuthTab(tab); setAuthErr(""); setPwd(""); setModal("auth");
   };
@@ -481,17 +498,24 @@ export default function Home() {
             {searchOpen && searchResults.length > 0 && (
               <div style={{ position: "absolute", top: "calc(100% - 2px)", left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, overflow: "hidden" }}>
                 {searchResults.map(u => (
-                  <Link key={u.username} href={`/${u.username}`} onClick={() => { setSearchQuery(""); setSearchOpen(false); }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", textDecoration: "none", transition: "background 0.12s" }}
+                  <div key={u.username} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", transition: "background 0.12s", cursor: "pointer" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--bg2)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
-                    <UAv username={u.username} size={32} avatarUrl={u.avatar_url} avatarColor={u.avatar_color} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{displayFor(u.username, u.display_name)}</div>
-                      <div style={{ fontSize: 12, color: "var(--muted)" }}>@{u.username}</div>
-                    </div>
-                  </Link>
+                    <Link href={`/${u.username}`} onClick={() => { setSearchQuery(""); setSearchOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flex: 1 }}>
+                      <UAv username={u.username} size={32} avatarUrl={u.avatar_url} avatarColor={u.avatar_color} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{displayFor(u.username, u.display_name)}</div>
+                        <div style={{ fontSize: 12, color: "var(--muted)" }}>@{u.username}</div>
+                      </div>
+                    </Link>
+                    {user && u.username !== profile?.username && (
+                      <button onClick={e => { e.stopPropagation(); toggleWatch(u.username); }}
+                        style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "2px 6px", borderRadius: 6, color: watching.includes(u.username) ? "var(--red)" : "var(--muted)" }}
+                        title={watching.includes(u.username) ? "Smetti di osservare" : "Osserva"}
+                      >{watching.includes(u.username) ? "👁" : "👁‍🗨"}</button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -668,6 +692,23 @@ export default function Home() {
           {/* PODIO MOBILE */}
           {assumptions.length > 0 && <Podium assumptions={assumptions} onPostClick={navigateToPost} />}
 
+          {/* Tab Home / Osservati */}
+          {user && (
+            <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border2)", background: "var(--surface)" }}>
+              {(["home", "osservati"] as const).map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                  flex: 1, background: "none", border: "none", cursor: "pointer",
+                  padding: "12px 0", fontSize: 14, fontWeight: activeTab === tab ? 700 : 400,
+                  color: activeTab === tab ? "var(--text)" : "var(--muted)",
+                  borderBottom: activeTab === tab ? "2px solid var(--red)" : "2px solid transparent",
+                  fontFamily: "inherit", transition: "color 0.15s",
+                }}>
+                  {tab === "home" ? "Home" : "👁 Osservati"}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* HASHTAG FILTER BANNER */}
           {activeHashtag && (
             <div style={{
@@ -690,11 +731,12 @@ export default function Home() {
           {/* FEED */}
           {assumptions.length === 0 ? (
             <div className="empty">
-              <div className="empty-icon">👀</div>
-              <div className="empty-title">Nessuna WA ancora</div>
-              <div>Sii il primo a rompere il ghiaccio.</div>
+              <div className="empty-icon">{activeTab === "osservati" ? "👁" : "👀"}</div>
+              <div className="empty-title">{activeTab === "osservati" ? "Nessun osservato ancora" : "Nessuna WA ancora"}</div>
+              <div>{activeTab === "osservati" ? "Vai sul profilo di un utente e inizia a osservarlo." : "Sii il primo a rompere il ghiaccio."}</div>
             </div>
           ) : assumptions
+            .filter(a => activeTab === "osservati" ? watching.includes(a.username) : true)
             .filter(a => !activeHashtag || a.text.toLowerCase().includes(activeHashtag))
             .flatMap((a, i) => {
               const card = (
@@ -709,10 +751,13 @@ export default function Home() {
                   onEditPost={editPost} onEditComment={editComment}
                   openCommentId={openCommentId} setOpenCommentId={setOpenCommentId}
                   onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)}
+                  currentUsername={profile?.username || ""}
+                  watching={watching}
+                  onToggleWatch={user ? toggleWatch : undefined}
                 />
                 </div>
               );
-              if (i === 3 && !activeHashtag && isMobile) {
+              if (i === 3 && !activeHashtag && isMobile && activeTab !== "osservati") {
                 return [card, <TrendingHashtagsMobile key="trending-mobile" assumptions={assumptions} onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)} activeHashtag={activeHashtag} />];
               }
               return [card];
@@ -1074,7 +1119,7 @@ function Podium({ assumptions, sidebar = false, onPostClick }: { assumptions: an
       <div className="right-widget" style={{ padding: "14px 14px 10px" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 15, color: "var(--text)" }}>🔥 Top post</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 15, color: "var(--text)" }}>🔥 Top of the week</span>
           <span style={{ fontSize: 10, fontWeight: 600, color: "var(--red)", background: "var(--red-pale)", padding: "2px 8px", borderRadius: 999 }}>⏳ {countdown}</span>
         </div>
         {/* Lista */}
@@ -1111,7 +1156,7 @@ function Podium({ assumptions, sidebar = false, onPostClick }: { assumptions: an
   return (
     <div className="podium-wrap">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, padding: "0 4px" }}>
-        <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 16, color: "var(--text)" }}>🔥 Top post</span>
+        <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 16, color: "var(--text)" }}>🔥 Top of the week</span>
         <span style={{ fontSize: 10, fontWeight: 600, color: "var(--red)", background: "var(--red-pale)", padding: "2px 8px", borderRadius: 999 }}>⏳ {countdown}</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0, alignItems: "end", padding: "0 4px" }}>

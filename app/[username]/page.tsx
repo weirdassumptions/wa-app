@@ -98,6 +98,8 @@ export default function ProfilePage() {
   const [menuOpen, setMenuOpen]   = useState(false);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
+  const [isWatching, setIsWatching] = useState(false);
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
   const [zoomAvatar, setZoomAvatar] = useState(false);
 
   /* ── dark mode ── */
@@ -160,6 +162,9 @@ export default function ProfilePage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
+        // Fetch watching status
+        supabase.from("watching").select("id").eq("watcher_id", session.user.id).eq("watched_username", username).maybeSingle()
+          .then(({ data }) => setIsWatching(!!data));
         supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle()
           .then(({ data }) => {
             if (data) {
@@ -265,6 +270,33 @@ export default function ProfilePage() {
       is_verified:  mp?.is_verified  ?? false,
     }]);
   }, []);
+
+  const navigateToPost = (id: string) => {
+    const el = document.getElementById(`post-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const row = el.querySelector(".tweet-row") as HTMLElement | null;
+      const target = row || el;
+      target.style.transition = "background 0s";
+      target.style.background = "rgba(212,90,74,0.3)";
+      setTimeout(() => {
+        target.style.transition = "background 2s ease-out";
+        target.style.background = "var(--surface)";
+      }, 50);
+      setTimeout(() => { target.style.background = ""; target.style.transition = ""; }, 2300);
+    }
+  };
+
+  const toggleWatch = async () => {
+    if (!user || isOwnProfile) return;
+    if (isWatching) {
+      await supabase.from("watching").delete().eq("watcher_id", user.id).eq("watched_username", username);
+      setIsWatching(false);
+    } else {
+      await supabase.from("watching").insert({ watcher_id: user.id, watched_username: username });
+      setIsWatching(true);
+    }
+  };
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push("/"); };
 
@@ -429,7 +461,31 @@ export default function ProfilePage() {
                 <div className="profile-stat"><span className="stat-n">{assumptions.length}</span><span className="stat-l">WA</span></div>
                 <div className="profile-stat"><span className="stat-n">{totalLikes}</span><span className="stat-l">likes</span></div>
               </div>
-              {isOwnProfile && (
+              {/* Top post mobile — nascosto su desktop */}
+              {assumptions.length > 0 && (() => {
+                const topPost = [...assumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
+                return (
+                  <div
+                    className="mobile-only"
+                    onClick={() => navigateToPost(topPost.id)}
+                    style={{
+                      flexDirection: "column", gap: 4, marginTop: 12,
+                      background: "var(--bg2)", borderRadius: 12,
+                      padding: "10px 14px", cursor: "pointer",
+                      border: "1px solid var(--border2)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>🏆 Top post</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--red)" }}>♥ {topPost.likes || 0}</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                      {topPost.text}
+                    </div>
+                  </div>
+                );
+              })()}
+              {isOwnProfile ? (
                 <button
                   onClick={() => {
                     setEditDisplayName(myProfile?.display_name || myProfile?.username || "");
@@ -441,6 +497,33 @@ export default function ProfilePage() {
                   className="edit-profile-btn"
                 >
                   Modifica profilo
+                </button>
+              ) : user && !isOwnProfile && (
+                <button
+                  onClick={toggleWatch}
+                  className="edit-profile-btn"
+                  style={{
+                    background: isWatching ? "transparent" : "var(--red)",
+                    color: isWatching ? "var(--muted)" : "#fff",
+                    border: isWatching ? "1px solid var(--border2)" : "1px solid transparent",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={e => {
+                    if (isWatching) {
+                      (e.currentTarget as HTMLButtonElement).textContent = "✕ Smetti";
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--red)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "var(--red)";
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (isWatching) {
+                      (e.currentTarget as HTMLButtonElement).textContent = "👁 Osservato";
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border2)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)";
+                    }
+                  }}
+                >
+                  {isWatching ? "👁 Osservato" : "Osserva"}
                 </button>
               )}
             </div>
@@ -455,34 +538,47 @@ export default function ProfilePage() {
                 <div>Nessun post da @{handleFor(pageProfile!.username)} per ora.</div>
               </div>
             ) : assumptions.map(a => (
+              <div key={a.id} id={`post-${a.id}`}>
               <TweetCard
-                key={a.id} a={a}
+                key={`tc-${a.id}`} a={a}
                 openCommentId={openCommentId} setOpenCommentId={setOpenCommentId}
                 comments={commentsByPost[a.id] ?? []}
                 isAdmin={isAdmin} profile={myProfile}
                 onLike={likePost} onDelete={deletePost} onPin={noOp}
-                currentUsername={pageProfile!.username}
                 onDeleteComment={deleteComment} onAddComment={addComment}
                 onEditPost={editPost} onEditComment={editComment}
                 onHashtag={(tag: string) => { window.location.href = `/?tag=${encodeURIComponent(tag)}`; }}
               />
+              </div>
             ))}
           </div>
         </div>
 
         {/* ── COLONNA DESTRA ── */}
         <aside className="right-col">
-          {assumptions.length > 0 && (
-            <div className="right-widget">
-              <div className="right-widget-title">Post più apprezzati</div>
-              {[...assumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 3).map(a => (
-                <div key={a.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border2)", fontSize: 13 }}>
-                  <div style={{ color: "var(--muted)", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{a.text}</div>
-                  <div style={{ color: "var(--muted2)", fontSize: 11, marginTop: 4 }}>♡ {a.likes || 0}</div>
+          {assumptions.length > 0 && (() => {
+            const topPost = [...assumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
+            return (
+              <div
+                className="right-widget"
+                onClick={() => navigateToPost(topPost.id)}
+                style={{ cursor: "pointer", transition: "background 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "")}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 14, color: "var(--text)" }}>🏆 Top post</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", display: "flex", alignItems: "center", gap: 4 }}>
+                    ♥ {topPost.likes || 0}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
+                <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.55, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
+                  {topPost.text}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>clicca per vedere il post →</div>
+              </div>
+            );
+          })()}
         </aside>
       </div>
 
