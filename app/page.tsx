@@ -57,21 +57,21 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"home"|"osservati"|"challenge">("home");
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  const defaultChallenge = useMemo(() => getChallengeOfDay(), []);
+  const todayChallengeDate = useMemo(() => getChallengeOfDay().date, []);
   const [challengeTopicOverride, setChallengeTopicOverride] = useState<string | null>(null);
   const [editingChallenge, setEditingChallenge] = useState(false);
   const [editChallengeTopic, setEditChallengeTopic] = useState("");
-  const challengeOfDay = useMemo(() => ({ date: defaultChallenge.date, topic: challengeTopicOverride ?? defaultChallenge.topic }), [defaultChallenge.date, defaultChallenge.topic, challengeTopicOverride]);
+  const challengeOfDay = useMemo(() => ({ date: todayChallengeDate, topic: challengeTopicOverride ?? "" }), [todayChallengeDate, challengeTopicOverride]);
   const isWaAdmin = profile?.username === OFFICIAL_USERNAME;
 
   /* ── anon: non può avere tab Osservati ── */
   useEffect(() => { if (!user && activeTab === "osservati") setActiveTab("home"); }, [user, activeTab]);
 
-  /* ── fetch challenge del giorno (override da DB per admin) ── */
+  /* ── fetch challenge del giorno (solo da DB/admin) ── */
   useEffect(() => {
-    supabase.from("daily_challenges").select("topic").eq("date", defaultChallenge.date).maybeSingle()
+    supabase.from("daily_challenges").select("topic").eq("date", todayChallengeDate).maybeSingle()
       .then(({ data }) => { if (data?.topic) setChallengeTopicOverride(data.topic); });
-  }, [defaultChallenge.date]);
+  }, [todayChallengeDate]);
 
   const navigateToPost = (id: string) => {
     const el = document.getElementById(`post-${id}`);
@@ -366,7 +366,7 @@ export default function Home() {
     const poster = profile ? (isOfficial(profile.username) ? OFFICIAL_USERNAME : profile.username) : "anonimo";
     const dname  = profile ? displayFor(profile.username, profile.display_name) : "Anonimo";
 
-    const finalText = challengeMode
+    const finalText = challengeMode && challengeOfDay.topic
       ? encodeChallengePostText(challengeOfDay.date, challengeOfDay.topic, text.trim())
       : text;
 
@@ -685,25 +685,29 @@ export default function Home() {
                   <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontWeight: 600, fontSize: 13, fontFamily: "inherit", padding: 0 }} onClick={() => openAuth("register")}>Crea un account</button>{" "}per apparire nel podio
                 </div>
               )}
-              {/* Challenge (sobrio) */}
+              {/* Challenge (solo admin: nessun fallback da lista) */}
               <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
                 {!editingChallenge ? (
                   <>
-                    Challenge: <span style={{ color: "var(--text)" }}>{challengeOfDay.topic}</span>
-                    {" · "}
-                    <button
-                      type="button"
-                      onClick={() => setChallengeMode(v => !v)}
-                      style={{
-                        background: "none", border: "none", padding: 0, fontFamily: "inherit", cursor: "pointer",
-                        color: challengeMode ? "var(--red)" : "var(--muted)",
-                        fontWeight: challengeMode ? 600 : 400,
-                        fontSize: 12,
-                        textDecoration: "underline",
-                      }}
-                    >
-                      {challengeMode ? "in risposta alla challenge" : "rispondi"}
-                    </button>
+                    Challenge: <span style={{ color: "var(--text)" }}>{challengeOfDay.topic || "nessuna impostata per oggi"}</span>
+                    {challengeOfDay.topic && (
+                      <>
+                        {" · "}
+                        <button
+                          type="button"
+                          onClick={() => setChallengeMode(v => !v)}
+                          style={{
+                            background: "none", border: "none", padding: 0, fontFamily: "inherit", cursor: "pointer",
+                            color: challengeMode ? "var(--red)" : "var(--muted)",
+                            fontWeight: challengeMode ? 600 : 400,
+                            fontSize: 12,
+                            textDecoration: "underline",
+                          }}
+                        >
+                          {challengeMode ? "in risposta alla challenge" : "rispondi"}
+                        </button>
+                      </>
+                    )}
                     {isWaAdmin && (
                       <>
                         {" · "}
@@ -712,7 +716,7 @@ export default function Home() {
                           onClick={() => { setEditingChallenge(true); setEditChallengeTopic(challengeOfDay.topic); }}
                           style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", cursor: "pointer", color: "var(--muted)", fontSize: 12, textDecoration: "underline" }}
                         >
-                          modifica
+                          {challengeOfDay.topic ? "modifica" : "imposta"}
                         </button>
                       </>
                     )}

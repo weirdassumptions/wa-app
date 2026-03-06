@@ -54,19 +54,6 @@ export type ChallengeMeta = {
   marker: string; // full marker prefix (including trailing newline)
 };
 
-const CHALLENGE_TOPICS = [
-  "Racconta una cosa che hai cambiato idea recentemente (e perché).",
-  "Descrivi una paura irrazionale che hai avuto da piccolo.",
-  "Qual è una regola non scritta che vorresti fosse ufficiale?",
-  "Confessa un'abitudine strana che ti rende felice.",
-  "Qual è la tua opinione impopolare più innocua?",
-  "Racconta un momento in cui ti sei sentito fuori posto (ma poi è andata bene).",
-  "Qual è una piccola cosa che ti fa arrabbiare più del dovuto?",
-  "Se potessi fare una domanda a te stesso tra 10 anni, quale sarebbe?",
-  "Qual è una bugia bianca che dici spesso?",
-  "Racconta un complimento che ti è rimasto impresso.",
-];
-
 const ymdLocal = (d: Date) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -74,18 +61,8 @@ const ymdLocal = (d: Date) => {
   return `${y}-${m}-${day}`;
 };
 
-// deterministic but simple index
-const hashDate = (ymd: string) => {
-  let h = 0;
-  for (let i = 0; i < ymd.length; i++) h = (h * 31 + ymd.charCodeAt(i)) >>> 0;
-  return h;
-};
-
-export const getChallengeOfDay = (d: Date = new Date()) => {
-  const date = ymdLocal(d);
-  const topic = CHALLENGE_TOPICS[hashDate(date) % CHALLENGE_TOPICS.length];
-  return { date, topic };
-};
+/** Solo la data di oggi per la challenge (topic viene da DB/admin). */
+export const getChallengeOfDay = (d: Date = new Date()) => ({ date: ymdLocal(d) });
 
 export const encodeChallengePostText = (date: string, topic: string, body: string) => {
   const safeTopic = encodeURIComponent(topic);
