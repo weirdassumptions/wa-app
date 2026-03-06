@@ -117,3 +117,60 @@ export const fmt = (d: string) => {
   if (s < 604800) return `${Math.floor(s / 86400)}g fa`;
   return new Date(date).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
 };
+
+/* ─── Mention @: sottosequenza e ordinamento ─── */
+export function isSubsequence(query: string, str: string): boolean {
+  const q = query.toLowerCase();
+  const s = str.toLowerCase();
+  let j = 0;
+  for (let i = 0; i < s.length && j < q.length; i++) {
+    if (s[i] === q[j]) j++;
+  }
+  return j === q.length;
+}
+
+export function subsequenceStartIndex(query: string, str: string): number {
+  const q = query.toLowerCase();
+  const s = str.toLowerCase();
+  if (q.length === 0) return 0;
+  let j = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === q[j]) {
+      j++;
+      if (j === q.length) return i - q.length + 1;
+    }
+  }
+  return Infinity;
+}
+
+export type MentionableUser = { username?: string; display_name?: string; avatar_url?: string; avatar_color?: string };
+export function sortUsersForMentions(users: MentionableUser[], q: string, watching: string[]): MentionableUser[] {
+  const ql = q.toLowerCase();
+  const scoreWithSub = (u: MentionableUser): { score: number; subIndex: number } => {
+    const un = (u.username ?? "").toLowerCase();
+    const dn = (u.display_name ?? "").toLowerCase();
+    let s = 0;
+    let subIndex = Infinity;
+    if (u.username && watching.includes(u.username)) s += 1000;
+    if (!ql) return { score: s, subIndex: 0 };
+    if (un === ql) return { score: s + 500, subIndex: 0 };
+    if (un.startsWith(ql)) return { score: s + 100, subIndex: 0 };
+    if (dn.startsWith(ql)) return { score: s + 80, subIndex: 0 };
+    if (isSubsequence(ql, un)) {
+      s += 30;
+      subIndex = Math.min(subIndex, subsequenceStartIndex(ql, un));
+    }
+    if (isSubsequence(ql, dn)) {
+      s += 15;
+      subIndex = Math.min(subIndex, subsequenceStartIndex(ql, dn));
+    }
+    return { score: s, subIndex: subIndex === Infinity ? 999 : subIndex };
+  };
+  return [...users].sort((a, b) => {
+    const da = scoreWithSub(a);
+    const db = scoreWithSub(b);
+    if (db.score !== da.score) return db.score - da.score;
+    if (da.subIndex !== db.subIndex) return da.subIndex - db.subIndex;
+    return (a.username ?? "").localeCompare(b.username ?? "", "it");
+  });
+}

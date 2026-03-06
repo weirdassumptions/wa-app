@@ -1,13 +1,56 @@
 "use client";
 
-import { useState, useEffect, memo, useCallback, useMemo } from "react";
+import React, { useState, useEffect, memo, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 
-/* ─── Render testo con hashtag evidenziati ─── */
-function renderWithHashtags(text: string, onHashtag?: (tag: string) => void) {
-  const parts = text.split(/(#[\w\u00C0-\u024F]+)/g);
+/* ─── Render testo con #hashtag e @username (mention) ─── */
+const RE_HASHTAG = /#[\w\u00C0-\u024F]+/;
+const RE_MENTION = /@[\w]+/;
+const RE_HASHTAG_OR_MENTION = /(#[\w\u00C0-\u024F]+|@[\w]+)/g;
+
+const MENTION_HASHTAG_STYLE = {
+  color: "var(--red)" as const,
+  fontWeight: 600 as const,
+  transition: "opacity 0.15s" as const,
+};
+
+export function renderWithHashtagsAndMentions(
+  text: string,
+  onHashtag?: (tag: string) => void,
+  composeMode?: boolean,
+  validUsernames?: Set<string>
+) {
+  const parts = text.split(RE_HASHTAG_OR_MENTION);
   return parts.map((part, i) => {
-    if (part.startsWith("#")) {
+    if (RE_MENTION.test(part)) {
+      const username = part.slice(1);
+      const isValidMention = !validUsernames || validUsernames.has(username.toLowerCase());
+      if (composeMode) {
+        if (!isValidMention) return part;
+        return (
+          <span key={i} style={{ color: "var(--red)", fontWeight: 300, transition: "opacity 0.15s", userSelect: "none" }}>{part}</span>
+        );
+      }
+      if (!isValidMention) return part;
+      return (
+        <Link
+          key={i}
+          href={`/${encodeURIComponent(username)}`}
+          onClick={e => e.stopPropagation()}
+          style={{
+            ...MENTION_HASHTAG_STYLE,
+            cursor: "pointer", textDecoration: "none",
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "0.7"; (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
+        >{part}</Link>
+      );
+    }
+    if (RE_HASHTAG.test(part)) {
+      const cursorVal = onHashtag ? "pointer" : "inherit";
+      const style = composeMode
+        ? { color: "var(--red)" as const, fontWeight: 300 as const, transition: "opacity 0.15s" as const, cursor: "inherit" as const, userSelect: "none" as const }
+        : { ...MENTION_HASHTAG_STYLE, cursor: cursorVal, userSelect: "none" as const };
       return (
         <span
           key={i}
@@ -22,12 +65,7 @@ function renderWithHashtags(text: string, onHashtag?: (tag: string) => void) {
             (e.currentTarget as HTMLElement).style.opacity = "1";
             (e.currentTarget as HTMLElement).style.textDecoration = "none";
           }}
-          style={{
-            color: "var(--red)", fontWeight: 600,
-            cursor: onHashtag ? "pointer" : "inherit",
-            transition: "opacity 0.15s",
-            userSelect: "none",
-          }}
+          style={style as React.CSSProperties}
         >{part}</span>
       );
     }
@@ -42,6 +80,8 @@ import {
   type Profile, type Comment, type Assumption,
   parseChallengePostText,
   encodeChallengePostText,
+  isSubsequence,
+  sortUsersForMentions,
 } from "./helpers";
 
 export type { Profile, Comment, Assumption };
@@ -58,8 +98,12 @@ export function useTick(ms = 10_000) {
   }, [ms]);
 }
 
-/* ─── Add comment box (trigger visivo) ─── */
-export function AddCommentBox({ profile, onOpen, onSubmit, activeReply, setActiveReply }: {
+/* ─── Add comment box con @ mention ─── */
+type ProfileForMention = { username?: string; display_name?: string; avatar_url?: string; avatar_color?: string };
+export function AddCommentBox({
+  profile, onOpen, onSubmit, activeReply, setActiveReply,
+  allProfiles = [], validUsernames, watching = [],
+}: {
   assumptionId: string;
   addComment: (aid: string, t: string, pid: string | null) => void;
   targetUsername: string;
@@ -68,95 +112,342 @@ export function AddCommentBox({ profile, onOpen, onSubmit, activeReply, setActiv
   onSubmit?: (text: string) => void;
   activeReply?: string | null;
   setActiveReply?: (v: string | null) => void;
+  allProfiles?: ProfileForMention[];
+  validUsernames?: Set<string>;
+  watching?: string[];
 }) {
   const [val, setVal] = useState("");
+  const [mentionSuggestions, setMentionSuggestions] = useState<{ open: boolean; query: string; start: number; end: number }>({ open: false, query: "", start: 0, end: 0 });
+  const [mentionHover, setMentionHover] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const pendingCursorRef = useRef<number | null>(null);
+  const pendingCursorTextRef = useRef<string | null>(null);
+  const validSet = useMemo(() => validUsernames ?? new Set(allProfiles.map(p => (p.username ?? "").toLowerCase()).filter(Boolean)), [validUsernames, allProfiles]);
+
   useEffect(() => { if (activeReply !== "main") setVal(""); }, [activeReply]);
+
+  const mentionMatches = useMemo(() => {
+    if (!mentionSuggestions.open) return [];
+    const q = mentionSuggestions.query.toLowerCase();
+    const filtered = allProfiles.filter(u => {
+      if (!u.username || u.username === "anonimo") return false;
+      if (!q) return true;
+      const un = u.username.toLowerCase();
+      const dn = (u.display_name ?? "").toLowerCase();
+      return un.startsWith(q) || dn.startsWith(q) || isSubsequence(q, un) || isSubsequence(q, dn);
+    });
+    return sortUsersForMentions(filtered, q, watching).slice(0, 5);
+  }, [mentionSuggestions.open, mentionSuggestions.query, allProfiles, watching]);
+
+  useEffect(() => {
+    if (taRef.current && pendingCursorRef.current !== null && pendingCursorTextRef.current !== null) {
+      const pos = pendingCursorRef.current;
+      const expectedText = pendingCursorTextRef.current;
+      pendingCursorRef.current = null;
+      pendingCursorTextRef.current = null;
+      const run = () => {
+        if (!taRef.current || taRef.current.value !== expectedText) return;
+        const len = taRef.current.value.length;
+        taRef.current.focus();
+        taRef.current.setSelectionRange(Math.min(pos, len), Math.min(pos, len));
+      };
+      setTimeout(run, 0);
+    }
+  }, [val]);
+
+  const handleChange = (v: string) => {
+    const text = v.slice(0, 280);
+    setVal(text);
+    const start = taRef.current?.selectionStart ?? text.length;
+    const before = text.slice(0, start);
+    const lastAt = before.lastIndexOf("@");
+    if (lastAt >= 0) {
+      const afterAt = before.slice(lastAt + 1);
+      const match = afterAt.match(/^[\w]*/);
+      const query = match ? match[0] : "";
+      const end = lastAt + 1 + query.length;
+      const charAfter = text.slice(end, end + 1);
+      const mentionComplete = query.length > 0 && charAfter !== "" && (charAfter === " " || /[.,;:!?\n]/.test(charAfter));
+      if (!mentionComplete) {
+        setMentionSuggestions({ open: true, query, start: lastAt, end });
+      } else {
+        setMentionSuggestions(prev => ({ ...prev, open: false }));
+        setMentionHover(null);
+      }
+    } else {
+      setMentionSuggestions(prev => ({ ...prev, open: false }));
+      setMentionHover(null);
+    }
+  };
+
+  const submit = () => {
+    if (!val.trim()) return;
+    onSubmit?.(val);
+    setVal("");
+  };
+
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 8,
+      display: "flex", alignItems: "flex-start", gap: 8,
       padding: "8px 16px 10px", borderTop: "1px solid var(--border2)",
     }}>
       <Avatar profile={profile} size={24} />
-      <input
-        style={{
-          flex: 1, background: "none", border: "none", outline: "none",
-          fontSize: 13, color: "var(--muted2)", fontFamily: "inherit",
-          fontStyle: val ? "normal" : "italic",
-        }}
-        placeholder="Commenta questa WA…"
-        value={val}
-        onFocus={() => { onOpen?.(); setActiveReply?.("main"); }}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === "Enter" && val.trim()) { onSubmit?.(val); setVal(""); }
-          if (e.key === "Escape") { setVal(""); }
-        }}
-      />
-      {val.trim() && (
-        <button
-          onClick={() => { onSubmit?.(val); setVal(""); }}
+      <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+        <div
+          aria-hidden
           style={{
-            width: 28, height: 28, borderRadius: "50%", border: "none",
-            background: "var(--red)", color: "#fff", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            position: "absolute", top: 0, left: 0, right: 0, minHeight: 40, padding: "6px 0",
+            fontFamily: "inherit", fontSize: 13, lineHeight: 1.4, color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden", pointerEvents: "none", zIndex: 0,
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
-          </svg>
-        </button>
-      )}
+          {val ? renderWithHashtagsAndMentions(val, () => {}, true, validSet) : "\u00A0"}
+        </div>
+        <textarea
+          ref={taRef}
+          placeholder="Commenta questa WA…"
+          value={val}
+          onFocus={() => { onOpen?.(); setActiveReply?.("main"); }}
+          onChange={e => handleChange(e.target.value)}
+          onBlur={() => setTimeout(() => { setMentionSuggestions(prev => ({ ...prev, open: false })); setMentionHover(null); }, 100)}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+            if (e.key === "Escape") setVal("");
+          }}
+          rows={2}
+          style={{
+            position: "relative", zIndex: 1, width: "100%", minHeight: 40, resize: "none",
+            background: "none", border: "none", outline: "none", fontSize: 13, lineHeight: 1.4, padding: "6px 0",
+            color: "transparent", caretColor: "var(--text)", fontFamily: "inherit", boxSizing: "border-box",
+          }}
+        />
+        {mentionSuggestions.open && mentionMatches.length > 0 && (
+          <div
+            style={{
+              position: "absolute", left: 0, right: 0, top: "100%", zIndex: 100,
+              background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 8,
+              boxShadow: "0 6px 16px rgba(0,0,0,0.1)", marginTop: 2, maxHeight: 180, overflowY: "auto",
+            }}
+            onMouseDown={e => e.preventDefault()}
+          >
+            {mentionMatches.map(u => (
+              <button
+                key={u.username}
+                type="button"
+                onMouseDown={() => {
+                  setMentionSuggestions({ open: false, query: "", start: 0, end: 0 });
+                  setMentionHover(null);
+                  const newText = (val.slice(0, mentionSuggestions.start) + "@" + (u.username ?? "") + val.slice(mentionSuggestions.end)).slice(0, 280);
+                  pendingCursorTextRef.current = newText;
+                  pendingCursorRef.current = mentionSuggestions.start + 1 + (u.username ?? "").length;
+                  setVal(newText);
+                }}
+                onMouseEnter={() => setMentionHover(u.username ?? null)}
+                onMouseLeave={() => setMentionHover(null)}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
+                  cursor: "pointer", border: "none", fontFamily: "inherit", textAlign: "left",
+                  background: mentionHover === u.username ? "rgba(212,90,74,0.15)" : "transparent",
+                }}
+              >
+                <UAv username={u.username ?? ""} size={20} avatarUrl={u.avatar_url} avatarColor={u.avatar_color} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayFor(u.username ?? "", u.display_name)}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>@{u.username}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {val.trim() && (
+          <button
+            type="button"
+            onClick={submit}
+            style={{
+              position: "absolute", right: 0, bottom: 0, zIndex: 110,
+              width: 28, height: 28, borderRadius: "50%", border: "none",
+              background: "var(--red)", color: "#fff", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── Reply box (input reale con autoFocus) ─── */
-export function ReplyBox({ assumptionId, addComment, targetUsername, profile, parentId, onClose }: {
+/* ─── Reply box con @ mention ─── */
+export function ReplyBox({
+  assumptionId, addComment, targetUsername, profile, parentId, onClose,
+  allProfiles = [], validUsernames, watching = [],
+}: {
   assumptionId: string;
   addComment: (aid: string, t: string, pid: string | null) => void;
   targetUsername: string;
   profile: Profile | null;
   parentId: string | null;
   onClose?: () => void;
+  allProfiles?: ProfileForMention[];
+  validUsernames?: Set<string>;
+  watching?: string[];
 }) {
   const [t, setT] = useState("");
+  const [mentionSuggestions, setMentionSuggestions] = useState<{ open: boolean; query: string; start: number; end: number }>({ open: false, query: "", start: 0, end: 0 });
+  const [mentionHover, setMentionHover] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const pendingCursorRef = useRef<number | null>(null);
+  const pendingCursorTextRef = useRef<string | null>(null);
+  const validSet = useMemo(() => validUsernames ?? new Set(allProfiles.map(p => (p.username ?? "").toLowerCase()).filter(Boolean)), [validUsernames, allProfiles]);
+
+  const mentionMatches = useMemo(() => {
+    if (!mentionSuggestions.open) return [];
+    const q = mentionSuggestions.query.toLowerCase();
+    const filtered = allProfiles.filter(u => {
+      if (!u.username || u.username === "anonimo") return false;
+      if (!q) return true;
+      const un = u.username.toLowerCase();
+      const dn = (u.display_name ?? "").toLowerCase();
+      return un.startsWith(q) || dn.startsWith(q) || isSubsequence(q, un) || isSubsequence(q, dn);
+    });
+    return sortUsersForMentions(filtered, q, watching).slice(0, 5);
+  }, [mentionSuggestions.open, mentionSuggestions.query, allProfiles, watching]);
+
+  useEffect(() => {
+    if (taRef.current && pendingCursorRef.current !== null && pendingCursorTextRef.current !== null) {
+      const pos = pendingCursorRef.current;
+      const expectedText = pendingCursorTextRef.current;
+      pendingCursorRef.current = null;
+      pendingCursorTextRef.current = null;
+      const run = () => {
+        if (!taRef.current || taRef.current.value !== expectedText) return;
+        const len = taRef.current.value.length;
+        taRef.current.focus();
+        taRef.current.setSelectionRange(Math.min(pos, len), Math.min(pos, len));
+      };
+      setTimeout(run, 0);
+    }
+  }, [t]);
+
+  const handleChange = (v: string) => {
+    const text = v.slice(0, 280);
+    setT(text);
+    const start = taRef.current?.selectionStart ?? text.length;
+    const before = text.slice(0, start);
+    const lastAt = before.lastIndexOf("@");
+    if (lastAt >= 0) {
+      const afterAt = before.slice(lastAt + 1);
+      const match = afterAt.match(/^[\w]*/);
+      const query = match ? match[0] : "";
+      const end = lastAt + 1 + query.length;
+      const charAfter = text.slice(end, end + 1);
+      const mentionComplete = query.length > 0 && charAfter !== "" && (charAfter === " " || /[.,;:!?\n]/.test(charAfter));
+      if (!mentionComplete) {
+        setMentionSuggestions({ open: true, query, start: lastAt, end });
+      } else {
+        setMentionSuggestions(prev => ({ ...prev, open: false }));
+        setMentionHover(null);
+      }
+    } else {
+      setMentionSuggestions(prev => ({ ...prev, open: false }));
+      setMentionHover(null);
+    }
+  };
+
   const submit = () => {
     if (!t.trim()) return;
     addComment(assumptionId, t, parentId);
     setT("");
     onClose?.();
   };
+
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 8,
+      display: "flex", alignItems: "flex-start", gap: 8,
       padding: "8px 16px 10px", borderTop: "1px solid var(--border2)",
     }}>
       <Avatar profile={profile} size={24} />
-      <input
-        style={{
-          flex: 1, background: "none", border: "none", outline: "none",
-          fontSize: 13, color: "var(--muted2)", fontFamily: "inherit", fontStyle: t ? "normal" : "italic",
-        }}
-        placeholder={`Rispondi a ${targetUsername}…`}
-        value={t}
-        onChange={e => setT(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === "Enter") submit();
-          if (e.key === "Escape") onClose?.();
-        }}
-        autoFocus
-      />
-      {t.trim() && (
-        <button onClick={submit} style={{
-          width: 28, height: 28, borderRadius: "50%", border: "none",
-          background: "var(--red)", color: "#fff", cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-        }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
-          </svg>
-        </button>
-      )}
+      <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+        <div
+          aria-hidden
+          style={{
+            position: "absolute", top: 0, left: 0, right: 0, minHeight: 40, padding: "6px 0",
+            fontFamily: "inherit", fontSize: 13, lineHeight: 1.4, color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden", pointerEvents: "none", zIndex: 0,
+          }}
+        >
+          {t ? renderWithHashtagsAndMentions(t, () => {}, true, validSet) : "\u00A0"}
+        </div>
+        <textarea
+          ref={taRef}
+          placeholder={`Rispondi a ${targetUsername}…`}
+          value={t}
+          onChange={e => handleChange(e.target.value)}
+          onBlur={() => setTimeout(() => { setMentionSuggestions(prev => ({ ...prev, open: false })); setMentionHover(null); }, 100)}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+            if (e.key === "Escape") onClose?.();
+          }}
+          rows={2}
+          autoFocus
+          style={{
+            position: "relative", zIndex: 1, width: "100%", minHeight: 40, resize: "none",
+            background: "none", border: "none", outline: "none", fontSize: 13, lineHeight: 1.4, padding: "6px 0",
+            color: "transparent", caretColor: "var(--text)", fontFamily: "inherit", boxSizing: "border-box",
+          }}
+        />
+        {mentionSuggestions.open && mentionMatches.length > 0 && (
+          <div
+            style={{
+              position: "absolute", left: 0, right: 0, top: "100%", zIndex: 100,
+              background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 8,
+              boxShadow: "0 6px 16px rgba(0,0,0,0.1)", marginTop: 2, maxHeight: 180, overflowY: "auto",
+            }}
+            onMouseDown={e => e.preventDefault()}
+          >
+            {mentionMatches.map(u => (
+              <button
+                key={u.username}
+                type="button"
+                onMouseDown={() => {
+                  setMentionSuggestions({ open: false, query: "", start: 0, end: 0 });
+                  setMentionHover(null);
+                  const newText = (t.slice(0, mentionSuggestions.start) + "@" + (u.username ?? "") + t.slice(mentionSuggestions.end)).slice(0, 280);
+                  pendingCursorTextRef.current = newText;
+                  pendingCursorRef.current = mentionSuggestions.start + 1 + (u.username ?? "").length;
+                  setT(newText);
+                }}
+                onMouseEnter={() => setMentionHover(u.username ?? null)}
+                onMouseLeave={() => setMentionHover(null)}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
+                  cursor: "pointer", border: "none", fontFamily: "inherit", textAlign: "left",
+                  background: mentionHover === u.username ? "rgba(212,90,74,0.15)" : "transparent",
+                }}
+              >
+                <UAv username={u.username ?? ""} size={20} avatarUrl={u.avatar_url} avatarColor={u.avatar_color} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayFor(u.username ?? "", u.display_name)}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>@{u.username}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {t.trim() && (
+          <button type="button" onClick={submit} style={{
+            position: "absolute", right: 0, bottom: 0, zIndex: 110,
+            width: 28, height: 28, borderRadius: "50%", border: "none",
+            background: "var(--red)", color: "#fff", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -165,6 +456,7 @@ export function ReplyBox({ assumptionId, addComment, targetUsername, profile, pa
 export function CommentNode({
   comment: c, allComments, isAdmin, profile, assumptionId,
   onDelete, onAdd, onEdit, depth, activeReply, setActiveReply,
+  validUsernames, allProfiles = [], watching = [],
 }: {
   comment: Comment; allComments: Comment[]; isAdmin: boolean; profile: Profile | null;
   assumptionId: string;
@@ -174,6 +466,9 @@ export function CommentNode({
   depth: number;
   activeReply?: string | null;
   setActiveReply?: (v: string | null) => void;
+  validUsernames?: Set<string>;
+  allProfiles?: ProfileForMention[];
+  watching?: string[];
 }) {
   useTick();
   const replying = activeReply === c.id;
@@ -237,7 +532,7 @@ export function CommentNode({
             </div>
           ) : (
             <div className="c-body">
-              {renderWithHashtags(c.text, tag => { window.location.assign(`/?tag=${encodeURIComponent(tag)}`); })}
+              {renderWithHashtagsAndMentions(c.text, tag => { window.location.assign(`/?tag=${encodeURIComponent(tag)}`); }, false, validUsernames)}
               {c.edited && <span style={{ fontSize: 10, color: "var(--muted2)", marginLeft: 5, fontStyle: "italic" }}>· modificato</span>}
             </div>
           )}
@@ -301,6 +596,9 @@ export function CommentNode({
             profile={profile}
             parentId={c.id}
             onClose={() => setReplying(false)}
+            allProfiles={allProfiles}
+            validUsernames={validUsernames}
+            watching={watching}
           />
         </div>
       )}
@@ -321,6 +619,9 @@ export function CommentNode({
               depth={depth + 1}
               activeReply={activeReply}
               setActiveReply={setActiveReply}
+              validUsernames={validUsernames}
+              allProfiles={allProfiles}
+              watching={watching}
             />
           ))}
         </div>
@@ -334,7 +635,7 @@ export const TweetCard = memo(function TweetCard({
   a, comments, isAdmin, profile, onLike, onDelete, onPin,
   onDeleteComment, onAddComment, onEditPost, onEditComment,
   currentUsername = "", openCommentId, setOpenCommentId, onHashtag,
-  watching = [], onToggleWatch,
+  watching = [], onToggleWatch, validUsernames, allProfiles = [],
 }: {
   a: Assumption;
   comments: Comment[];
@@ -353,6 +654,8 @@ export const TweetCard = memo(function TweetCard({
   onHashtag?: (tag: string) => void;
   watching?: string[];
   onToggleWatch?: (username: string) => void;
+  validUsernames?: Set<string>;
+  allProfiles?: ProfileForMention[];
 }) {
   useTick();
   const challenge = useMemo(() => parseChallengePostText(a.text), [a.text]);
@@ -491,7 +794,7 @@ export const TweetCard = memo(function TweetCard({
                 </div>
               )}
               <div style={challenge ? { textDecoration: "underline", textDecorationColor: "rgba(212,90,74,0.75)", textUnderlineOffset: 4 } : undefined}>
-                {renderWithHashtags(displayText, onHashtag)}
+                {renderWithHashtagsAndMentions(displayText, onHashtag)}
               </div>
               {a.edited && <span style={{ fontSize: 11, color: "var(--muted2)", marginLeft: 6, fontStyle: "italic" }}>· modificato</span>}
             </div>
@@ -582,6 +885,9 @@ export const TweetCard = memo(function TweetCard({
               depth={0}
               activeReply={activeReply}
               setActiveReply={setActiveReply}
+              validUsernames={validUsernames}
+              allProfiles={allProfiles}
+              watching={watching}
             />
           ))}
 
@@ -595,6 +901,9 @@ export const TweetCard = memo(function TweetCard({
               onSubmit={t => handleAddComment(a.id, t, null)}
               activeReply={activeReply}
               setActiveReply={setActiveReply}
+              allProfiles={allProfiles}
+              validUsernames={validUsernames}
+              watching={watching}
             />
           )}
 

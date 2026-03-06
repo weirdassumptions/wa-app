@@ -8,6 +8,7 @@ import {
   TweetCard, UAv, Badge,
   displayFor, handleFor, avatarGrad, isOfficial,
   OFFICIAL_LOGO, OFFICIAL_USERNAME, AVATAR_COLORS,
+  parseChallengePostText,
   type Profile, type Comment, type Assumption,
 } from "../components/tweet-card";
 
@@ -98,6 +99,7 @@ export default function ProfilePage() {
   const [menuOpen, setMenuOpen]   = useState(false);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
+  const [allProfiles, setAllProfiles] = useState<{ username?: string; display_name?: string; avatar_url?: string; avatar_color?: string }[]>([]);
   const [isWatching, setIsWatching] = useState(false);
   const [watchHover, setWatchHover] = useState(false);
   const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
@@ -177,6 +179,15 @@ export default function ProfilePage() {
       }
     });
   }, []);
+
+  /* ── lista profili (per @ nei commenti) ── */
+  useEffect(() => {
+    supabase.from("profiles").select("username, display_name, avatar_url, avatar_color").then(({ data }) => {
+      setAllProfiles((data ?? []).filter((r: { username?: string }) => r.username && r.username !== "anonimo"));
+    });
+  }, []);
+
+  const validUsernamesSet = useMemo(() => new Set(allProfiles.map(p => (p.username ?? "").toLowerCase()).filter(Boolean)), [allProfiles]);
 
   /* ── fetch dati pagina profilo ── */
   const fetchProfileData = useCallback(async () => {
@@ -468,6 +479,8 @@ export default function ProfilePage() {
               {/* Top post mobile — nascosto su desktop */}
               {assumptions.length > 0 && (() => {
                 const topPost = [...assumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
+                const challenge = parseChallengePostText(topPost.text);
+                const topPostPreview = challenge ? `${challenge.topic} — ${challenge.body}` : topPost.text;
                 return (
                   <div
                     className="mobile-only"
@@ -484,7 +497,7 @@ export default function ProfilePage() {
                       <span style={{ fontSize: 12, fontWeight: 700, color: "var(--red)" }}>♥ {topPost.likes || 0}</span>
                     </div>
                     <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                      {topPost.text}
+                      {topPostPreview}
                     </div>
                   </div>
                 );
@@ -544,6 +557,8 @@ export default function ProfilePage() {
                 onDeleteComment={deleteComment} onAddComment={addComment}
                 onEditPost={editPost} onEditComment={editComment}
                 onHashtag={(tag: string) => { window.location.assign(`/?tag=${encodeURIComponent(tag)}`); }}
+                validUsernames={validUsernamesSet}
+                allProfiles={allProfiles}
               />
               </div>
             ))}
@@ -554,6 +569,8 @@ export default function ProfilePage() {
         <aside className="right-col">
           {assumptions.length > 0 && (() => {
             const topPost = [...assumptions].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
+            const challenge = parseChallengePostText(topPost.text);
+            const topPostPreview = challenge ? `${challenge.topic} — ${challenge.body}` : topPost.text;
             return (
               <div
                 className="right-widget"
@@ -569,7 +586,7 @@ export default function ProfilePage() {
                   </span>
                 </div>
                 <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.55, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
-                  {topPost.text}
+                  {topPostPreview}
                 </div>
                 <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>clicca per vedere il post →</div>
               </div>

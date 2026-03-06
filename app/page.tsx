@@ -8,6 +8,7 @@ import {
   TweetCard, Avatar, UAv, Badge,
   displayFor, handleFor, isOfficial,
   OFFICIAL_LOGO, OFFICIAL_USERNAME, AVATAR_COLORS, avatarGrad, initial,
+  renderWithHashtagsAndMentions,
   type Profile, type Comment,
 } from "./components/tweet-card";
 import { getChallengeOfDay, encodeChallengePostText, parseChallengePostText } from "./components/helpers";
@@ -44,7 +45,11 @@ export default function Home() {
   const fileRef    = useRef<HTMLInputElement>(null);
   const regFileRef = useRef<HTMLInputElement>(null);
   const taRef      = useRef<HTMLTextAreaElement>(null);
+  const pendingCursorRef = useRef<number | null>(null);
+  const pendingCursorTextRef = useRef<string | null>(null);
   const [composeFocused, setComposeFocused] = useState(false);
+  const [mentionSuggestions, setMentionSuggestions] = useState<{ open: boolean; query: string; start: number; end: number }>({ open: false, query: "", start: 0, end: 0 });
+  const [mentionHover, setMentionHover] = useState<string | null>(null);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -61,7 +66,9 @@ export default function Home() {
   const [challengeTopicOverride, setChallengeTopicOverride] = useState<string | null>(null);
   const [editingChallenge, setEditingChallenge] = useState(false);
   const [editChallengeTopic, setEditChallengeTopic] = useState("");
+  const [challengeSaveError, setChallengeSaveError] = useState<string | null>(null);
   const challengeOfDay = useMemo(() => ({ date: todayChallengeDate, topic: challengeTopicOverride ?? "" }), [todayChallengeDate, challengeTopicOverride]);
+  const validUsernamesSet = useMemo(() => new Set(allProfiles.map((p: { username?: string }) => (p.username ?? "").toLowerCase()).filter(Boolean)), [allProfiles]);
   const isWaAdmin = profile?.username === OFFICIAL_USERNAME;
 
   /* ── anon: non può avere tab Osservati ── */
@@ -100,6 +107,24 @@ export default function Home() {
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  useEffect(() => {
+    if (taRef.current && pendingCursorRef.current !== null && pendingCursorTextRef.current !== null) {
+      const pos = pendingCursorRef.current;
+      const expectedText = pendingCursorTextRef.current;
+      pendingCursorRef.current = null;
+      pendingCursorTextRef.current = null;
+      const run = () => {
+        if (!taRef.current) return;
+        if (taRef.current.value !== expectedText) return;
+        const len = taRef.current.value.length;
+        const safePos = Math.min(Math.max(0, pos), len);
+        taRef.current.focus();
+        taRef.current.setSelectionRange(safePos, safePos);
+      };
+      setTimeout(run, 0);
+    }
+  }, [text]);
 
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 300);
@@ -262,11 +287,12 @@ export default function Home() {
 
   /* ── register ── */
   const handleRegister = async () => {
-    if (!regUsername.trim()) { setAuthErr("Scegli un username."); return; }
-    if (!pwd)                { setAuthErr("Scegli una password."); return; }
+    const usernameLower = regUsername.trim().toLowerCase();
+    if (!usernameLower) { setAuthErr("Scegli un username."); return; }
+    if (!pwd) { setAuthErr("Scegli una password."); return; }
     setAuthLoading(true); setAuthErr("");
 
-    const { data: existing } = await supabase.from("profiles").select("id").eq("username", regUsername.trim()).maybeSingle();
+    const { data: existing } = await supabase.from("profiles").select("id").eq("username", usernameLower).maybeSingle();
     if (existing) { setAuthErr("Username già in uso."); setAuthLoading(false); return; }
 
     const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: pwd });
@@ -277,11 +303,11 @@ export default function Home() {
       let avatarUrl: string | null = null;
       if (regAvatarFile) avatarUrl = await uploadAvatar(regAvatarFile, data.user.id);
 
-      // 2. Profilo — PRIMA di setSession così ensureProfile lo trova subito
+      // 2. Profilo — PRIMA di setSession così ensureProfile lo trova subito (username solo minuscolo)
       const { error: profileError } = await supabase.from("profiles").upsert([{
         id:           data.user.id,
-        username:     regUsername.trim(),
-        display_name: regDisplayName.trim() || regUsername.trim(),
+        username:     usernameLower,
+        display_name: regDisplayName.trim() || usernameLower,
         bio:          regBio.trim(),
         avatar_color: regColor,
         avatar_url:   avatarUrl,
@@ -457,15 +483,100 @@ export default function Home() {
     }]);
   }, []); // profileRef è stabile
 
+  /* ── match a sottosequenza: le lettere digitate compaiono in ordine nel nome (es. "fe" → "federico", "francesco") ── */
+  const isSubsequence = useCallback((query: string, str: string) => {
+    const q = query.toLowerCase();
+    const s = str.toLowerCase();
+    let j = 0;
+    for (let i = 0; i < s.length && j < q.length; i++) {
+      if (s[i] === q[j]) j++;
+    }
+    return j === q.length;
+  }, []);
+  const subsequenceStartIndex = useCallback((query: string, str: string): number => {
+    const q = query.toLowerCase();
+    const s = str.toLowerCase();
+    if (q.length === 0) return 0;
+    let j = 0;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === q[j]) {
+        j++;
+        if (j === q.length) return i - q.length + 1;
+      }
+    }
+    return Infinity;
+  }, []);
+
+  /* ── ordinamento intelligente: osservati in testa, poi per rilevanza (exact → startsWith → subsequence/contains), infine alfabetico ── */
+  const sortUsersByRelevance = useCallback((
+    list: typeof allProfiles,
+    q: string,
+    opts: { useIncludes?: boolean; useSubsequence?: boolean }
+  ) => {
+    const useIncludes = opts?.useIncludes ?? false;
+    const useSubsequence = opts?.useSubsequence ?? false;
+    const scoreWithSub = (u: (typeof allProfiles)[0]): { score: number; subIndex: number } => {
+      const un = (u.username ?? "").toLowerCase();
+      const dn = (u.display_name ?? "").toLowerCase();
+      let s = 0;
+      let subIndex = Infinity;
+      if (watching.includes(u.username)) s += 1000;
+      if (!q) return { score: s, subIndex: 0 };
+      if (un === q) return { score: s + 500, subIndex: 0 };
+      if (un.startsWith(q)) return { score: s + 100, subIndex: 0 };
+      if (dn.startsWith(q)) return { score: s + 80, subIndex: 0 };
+      if (useSubsequence) {
+        const unSub = isSubsequence(q, u.username ?? "");
+        const dnSub = isSubsequence(q, u.display_name ?? "");
+        if (unSub) {
+          s += 30;
+          subIndex = Math.min(subIndex, subsequenceStartIndex(q, u.username ?? ""));
+        }
+        if (dnSub) {
+          s += 15;
+          subIndex = Math.min(subIndex, subsequenceStartIndex(q, u.display_name ?? ""));
+        }
+      }
+      if (useIncludes && s === (watching.includes(u.username) ? 1000 : 0)) {
+        if (un.includes(q)) s += 40;
+        else if (dn.includes(q)) s += 20;
+      }
+      return { score: s, subIndex: subIndex === Infinity ? 999 : subIndex };
+    };
+    return [...list].sort((a, b) => {
+      const da = scoreWithSub(a);
+      const db = scoreWithSub(b);
+      if (db.score !== da.score) return db.score - da.score;
+      if (da.subIndex !== db.subIndex) return da.subIndex - db.subIndex;
+      return (a.username ?? "").localeCompare(b.username ?? "", "it");
+    });
+  }, [watching, isSubsequence, subsequenceStartIndex]);
+
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return allProfiles
-      .filter(u => u.username && u.username !== "anonimo" && (
-        u.username.toLowerCase().includes(q) || (u.display_name || "").toLowerCase().includes(q)
-      ))
-      .slice(0, 6);
-  }, [searchQuery, allProfiles]);
+    const filtered = allProfiles.filter(u => {
+      if (!u.username || u.username === "anonimo") return false;
+      const un = u.username.toLowerCase();
+      const dn = (u.display_name ?? "").toLowerCase();
+      return un.includes(q) || dn.includes(q) || isSubsequence(q, un) || isSubsequence(q, dn);
+    });
+    return sortUsersByRelevance(filtered, q, { useIncludes: true, useSubsequence: true }).slice(0, 6);
+  }, [searchQuery, allProfiles, sortUsersByRelevance, isSubsequence]);
+
+  const mentionMatches = useMemo(() => {
+    if (!mentionSuggestions.open) return [];
+    const q = mentionSuggestions.query.toLowerCase();
+    const filtered = allProfiles.filter(u => {
+      if (!u.username || u.username === "anonimo") return false;
+      if (!q) return true;
+      const un = u.username.toLowerCase();
+      const dn = (u.display_name ?? "").toLowerCase();
+      return un.startsWith(q) || dn.startsWith(q) ||
+        isSubsequence(q, un) || isSubsequence(q, dn);
+    });
+    return sortUsersByRelevance(filtered, q, { useSubsequence: true }).slice(0, 5);
+  }, [mentionSuggestions.open, mentionSuggestions.query, allProfiles, sortUsersByRelevance, isSubsequence]);
 
   const commentsByPost = useMemo(() => {
     const map: Record<string, typeof comments> = {};
@@ -738,7 +849,12 @@ export default function Home() {
                       onClick={async () => {
                         const topic = editChallengeTopic.trim();
                         if (!topic) return;
-                        await supabase.from("daily_challenges").upsert({ date: challengeOfDay.date, topic }, { onConflict: "date" });
+                        setChallengeSaveError(null);
+                        const { error } = await supabase.from("daily_challenges").upsert({ date: challengeOfDay.date, topic }, { onConflict: "date" });
+                        if (error) {
+                          setChallengeSaveError(error.message || "Errore salvataggio");
+                          return;
+                        }
                         setChallengeTopicOverride(topic);
                         setEditingChallenge(false);
                       }}
@@ -748,32 +864,113 @@ export default function Home() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setEditingChallenge(false); setEditChallengeTopic(""); }}
+                      onClick={() => { setEditingChallenge(false); setEditChallengeTopic(""); setChallengeSaveError(null); }}
                       style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
                     >
                       Annulla
                     </button>
+                    {challengeSaveError && (
+                      <span style={{ fontSize: 12, color: "var(--red)" }}>{challengeSaveError}</span>
+                    )}
                   </div>
                 )}
               </div>
-              <textarea
-                ref={taRef}
-                className="compose-ta"
-                placeholder={
-                  isOfficial(profile?.username ?? "")
-                    ? "Scrivi un post ufficiale…"
-                    : (challengeMode ? "Rispondi alla challenge di oggi…" : waPlaceholder)
-                }
-                value={text}
-                onChange={e => {
-                  setText(e.target.value.slice(0, 280));
-                  if (taRef.current) { taRef.current.style.height = "auto"; taRef.current.style.height = taRef.current.scrollHeight + "px"; }
-                }}
-                onFocus={() => setComposeFocused(true)}
-                onBlur={() => setComposeFocused(false)}
-                rows={3}
-                style={{ minHeight: 72 }}
-              />
+              <div style={{ position: "relative" }}>
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute", top: 0, left: 0, right: 0, minHeight: 72, paddingBottom: 12,
+                    fontFamily: "'DM Sans', sans-serif", fontSize: 19, fontWeight: 300, lineHeight: 1.5,
+                    color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden",
+                    pointerEvents: "none", zIndex: 0,
+                  }}
+                >
+                  {text ? renderWithHashtagsAndMentions(text, () => {}, true, validUsernamesSet) : "\u00A0"}
+                </div>
+                <textarea
+                  ref={taRef}
+                  className="compose-ta"
+                  placeholder={
+                    isOfficial(profile?.username ?? "")
+                      ? "Scrivi un post ufficiale…"
+                      : (challengeMode ? "Rispondi alla challenge di oggi…" : waPlaceholder)
+                  }
+                  value={text}
+                  onChange={e => {
+                    const v = e.target.value.slice(0, 280);
+                    setText(v);
+                    if (taRef.current) { taRef.current.style.height = "auto"; taRef.current.style.height = taRef.current.scrollHeight + "px"; }
+                    const start = e.target.selectionStart;
+                    const before = v.slice(0, start);
+                    const lastAt = before.lastIndexOf("@");
+                    if (lastAt >= 0) {
+                      const afterAt = before.slice(lastAt + 1);
+                      const match = afterAt.match(/^[\w]*/);
+                      const query = match ? match[0] : "";
+                      const end = lastAt + 1 + query.length;
+                      const charAfter = v.slice(end, end + 1);
+                      const mentionComplete = query.length > 0 && charAfter !== "" && (charAfter === " " || /[.,;:!?\n]/.test(charAfter));
+                      if (mentionComplete) {
+                        setMentionSuggestions(prev => ({ ...prev, open: false }));
+                        setMentionHover(null);
+                      } else {
+                        setMentionHover(null);
+                        setMentionSuggestions({ open: true, query, start: lastAt, end });
+                      }
+                    } else {
+                      setMentionSuggestions(prev => ({ ...prev, open: false }));
+                      setMentionHover(null);
+                    }
+                  }}
+                  onFocus={() => setComposeFocused(true)}
+                  onBlur={() => setTimeout(() => { setMentionSuggestions(prev => ({ ...prev, open: false })); setMentionHover(null); }, 100)}
+                  rows={3}
+                  style={{ minHeight: 72, position: "relative", zIndex: 1, color: "transparent", caretColor: "var(--text)" }}
+                />
+                {mentionSuggestions.open && mentionMatches.length > 0 && (
+                  <div
+                    style={{
+                      position: "absolute", left: 0, right: 0, top: "100%", zIndex: 100,
+                      background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 10,
+                      boxShadow: "0 6px 16px rgba(0,0,0,0.1)", marginTop: 4,
+                      maxHeight: 200, overflowY: "auto",
+                    }}
+                    onMouseDown={e => e.preventDefault()}
+                  >
+                    {mentionMatches.map(u => {
+                      const isHover = mentionHover === u.username;
+                      return (
+                        <button
+                          key={u.username}
+                          type="button"
+                          onMouseDown={() => {
+                            setMentionSuggestions({ open: false, query: "", start: 0, end: 0 });
+                            setMentionHover(null);
+                            const newText = (text.slice(0, mentionSuggestions.start) + "@" + u.username + text.slice(mentionSuggestions.end)).slice(0, 280);
+                            pendingCursorTextRef.current = newText;
+                            pendingCursorRef.current = mentionSuggestions.start + 1 + u.username.length;
+                            setText(newText);
+                          }}
+                          onMouseEnter={() => setMentionHover(u.username)}
+                          onMouseLeave={() => setMentionHover(null)}
+                          style={{
+                            width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px",
+                            cursor: "pointer", border: "none", fontFamily: "inherit", textAlign: "left",
+                            background: isHover ? "rgba(212,90,74,0.15)" : "transparent",
+                            transition: "background 0.1s",
+                          }}
+                        >
+                          <UAv username={u.username} size={22} avatarUrl={u.avatar_url} avatarColor={u.avatar_color} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayFor(u.username, u.display_name)}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted)" }}>@{u.username}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               <div className="compose-footer">
                 <span style={{ fontSize: 12, color: text.length > 240 ? (text.length > 260 ? "var(--red)" : "#b87040") : "var(--muted2)", fontWeight: text.length > 240 ? 600 : 400 }}>
                   {text.length}/280
@@ -860,6 +1057,8 @@ export default function Home() {
                   currentUsername={profile?.username || ""}
                   watching={watching}
                   onToggleWatch={user ? toggleWatch : undefined}
+                  validUsernames={validUsernamesSet}
+                  allProfiles={allProfiles}
                 />
                 </div>
               );
@@ -920,7 +1119,7 @@ export default function Home() {
                       </div>
                       <div>
                         <div className="f-label">Username</div>
-                        <input className="f-inp" placeholder="il tuo @handle pubblico" value={regUsername} onChange={e => setRegUsername(e.target.value)} />
+                        <input className="f-inp" placeholder="il tuo @handle pubblico (solo minuscole)" value={regUsername} onChange={e => setRegUsername(e.target.value.toLowerCase())} />
                       </div>
                       <div>
                         <div className="f-label">Nome visualizzato <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(opzionale)</span></div>
@@ -1245,7 +1444,7 @@ function Podium({ assumptions, sidebar = false, onPostClick }: { assumptions: an
                   <UAv username={a.username} size={18} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
                   <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayFor(a.username, a.display_name)}</span>
                 </div>
-                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{a.text}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{(() => { const c = parseChallengePostText(a.text); return c ? `${c.topic} — ${c.body}` : a.text; })()}</div>
               </div>
               {/* Likes */}
               <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0, marginTop: 1 }}>
@@ -1299,7 +1498,7 @@ function Podium({ assumptions, sidebar = false, onPostClick }: { assumptions: an
                   {displayFor(a.username, a.display_name)}
                 </span>
                 <span style={{ fontSize: 10, color: "var(--muted)", lineHeight: 1.3, textAlign: "center", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                  {a.text}
+                  {(() => { const c = parseChallengePostText(a.text); return c ? `${c.topic} — ${c.body}` : a.text; })()}
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                   <Heart color={color} size={12} />
