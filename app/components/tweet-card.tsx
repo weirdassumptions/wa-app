@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, memo, useCallback } from "react";
+import { useState, useEffect, memo, useCallback, useMemo } from "react";
 import Link from "next/link";
 
 /* ─── Render testo con hashtag evidenziati ─── */
@@ -40,12 +40,14 @@ import {
   displayFor, handleFor, fmt,
   OFFICIAL_USERNAME,
   type Profile, type Comment, type Assumption,
+  parseChallengePostText,
+  encodeChallengePostText,
 } from "./helpers";
 
 export type { Profile, Comment, Assumption };
 export { displayFor, handleFor, fmt, OFFICIAL_USERNAME };
 export { Avatar, UAv, Badge };
-export { OFFICIAL_LOGO, OFFICIAL_NAME, OFFICIAL_HANDLE, AVATAR_COLORS, avatarGrad, initial, isOfficial } from "./helpers";
+export { OFFICIAL_LOGO, OFFICIAL_NAME, OFFICIAL_HANDLE, AVATAR_COLORS, avatarGrad, initial, isOfficial, getChallengeOfDay, parseChallengePostText, encodeChallengePostText } from "./helpers";
 
 /* ─── useTick: forza re-render ogni N ms per aggiornare timestamp relativi ─── */
 export function useTick(ms = 10_000) {
@@ -235,7 +237,7 @@ export function CommentNode({
             </div>
           ) : (
             <div className="c-body">
-              {renderWithHashtags(c.text, tag => { window.location.href = `/?tag=${encodeURIComponent(tag)}`; })}
+              {renderWithHashtags(c.text, tag => { window.location.assign(`/?tag=${encodeURIComponent(tag)}`); })}
               {c.edited && <span style={{ fontSize: 10, color: "var(--muted2)", marginLeft: 5, fontStyle: "italic" }}>· modificato</span>}
             </div>
           )}
@@ -353,8 +355,10 @@ export const TweetCard = memo(function TweetCard({
   onToggleWatch?: (username: string) => void;
 }) {
   useTick();
+  const challenge = useMemo(() => parseChallengePostText(a.text), [a.text]);
+  const displayText = challenge?.body ?? a.text;
   const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState(a.text);
+  const [editText, setEditText] = useState(() => displayText);
   const [activeReply, setActiveReply] = useState<string | null>(null);
   const open = openCommentId === a.id;
   const setOpen = (v: boolean) => { setOpenCommentId?.(v ? a.id : null); if (!v) setActiveReply(null); };
@@ -367,6 +371,10 @@ export const TweetCard = memo(function TweetCard({
   useEffect(() => {
     if (!open) setActiveReply(null);
   }, [open]);
+
+  useEffect(() => {
+    if (!editing) setEditText(displayText);
+  }, [displayText, editing]);
   const roots = comments.filter((c: Comment) => !c.parent_id);
 
   /* Chiude la reply box e aggiunge il commento */
@@ -435,7 +443,7 @@ export const TweetCard = memo(function TweetCard({
                     onMouseEnter={e => { e.currentTarget.style.opacity = "0.75"; }}
                     onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
                   >
-                    {watching.includes(a.username) ? "👁 osservato" : "+ osserva"}
+                    {watching.includes(a.username) ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> osservato</> : "+ osserva"}
                   </button>
                 )}
               </div>
@@ -462,18 +470,29 @@ export const TweetCard = memo(function TweetCard({
               />
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button
-                  onClick={() => { onEditPost(a.id, editText); setEditing(false); }}
+                  onClick={() => {
+                    const newText = challenge ? encodeChallengePostText(challenge.date, challenge.topic, editText) : editText;
+                    onEditPost(a.id, newText);
+                    setEditing(false);
+                  }}
                   style={{ background: "var(--red)", border: "none", borderRadius: 999, color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}
                 >Salva</button>
                 <button
-                  onClick={() => { setEditing(false); setEditText(a.text); }}
+                  onClick={() => { setEditing(false); setEditText(displayText); }}
                   style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
                 >Annulla</button>
               </div>
             </div>
           ) : (
             <div className="tweet-body">
-              {renderWithHashtags(a.text, onHashtag)}
+              {challenge && (
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+                  Challenge: <span style={{ color: "var(--text)" }}>{challenge.topic}</span>
+                </div>
+              )}
+              <div style={challenge ? { textDecoration: "underline", textDecorationColor: "rgba(212,90,74,0.75)", textUnderlineOffset: 4 } : undefined}>
+                {renderWithHashtags(displayText, onHashtag)}
+              </div>
               {a.edited && <span style={{ fontSize: 11, color: "var(--muted2)", marginLeft: 6, fontStyle: "italic" }}>· modificato</span>}
             </div>
           )}

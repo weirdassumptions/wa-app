@@ -99,6 +99,7 @@ export default function ProfilePage() {
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
   const [isWatching, setIsWatching] = useState(false);
+  const [watchHover, setWatchHover] = useState(false);
   const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
   const [zoomAvatar, setZoomAvatar] = useState(false);
 
@@ -289,12 +290,15 @@ export default function ProfilePage() {
 
   const toggleWatch = async () => {
     if (!user || isOwnProfile) return;
-    if (isWatching) {
-      await supabase.from("watching").delete().eq("watcher_id", user.id).eq("watched_username", username);
-      setIsWatching(false);
+    const wasWatching = isWatching;
+    // Ottimistico
+    setIsWatching(!wasWatching);
+    if (wasWatching) {
+      const { error } = await supabase.from("watching").delete().eq("watcher_id", user.id).eq("watched_username", username);
+      if (error) { console.error("unwatch error:", error); setIsWatching(true); }
     } else {
-      await supabase.from("watching").insert({ watcher_id: user.id, watched_username: username });
-      setIsWatching(true);
+      const { error } = await supabase.from("watching").insert({ watcher_id: user.id, watched_username: username });
+      if (error) { console.error("watch error:", error); setIsWatching(false); }
     }
   };
 
@@ -508,22 +512,14 @@ export default function ProfilePage() {
                     border: isWatching ? "1px solid var(--border2)" : "1px solid transparent",
                     transition: "all 0.2s",
                   }}
-                  onMouseEnter={e => {
-                    if (isWatching) {
-                      (e.currentTarget as HTMLButtonElement).textContent = "✕ Smetti";
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--red)";
-                      (e.currentTarget as HTMLButtonElement).style.color = "var(--red)";
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (isWatching) {
-                      (e.currentTarget as HTMLButtonElement).textContent = "👁 Osservato";
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border2)";
-                      (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)";
-                    }
-                  }}
+                  onMouseEnter={() => { if (isWatching) setWatchHover(true); }}
+                  onMouseLeave={() => { if (isWatching) setWatchHover(false); }}
                 >
-                  {isWatching ? "👁 Osservato" : "Osserva"}
+                  {isWatching
+                    ? (watchHover
+                      ? "✕ Smetti"
+                      : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Osservato</>)
+                    : "Osserva"}
                 </button>
               )}
             </div>
@@ -547,7 +543,7 @@ export default function ProfilePage() {
                 onLike={likePost} onDelete={deletePost} onPin={noOp}
                 onDeleteComment={deleteComment} onAddComment={addComment}
                 onEditPost={editPost} onEditComment={editComment}
-                onHashtag={(tag: string) => { window.location.href = `/?tag=${encodeURIComponent(tag)}`; }}
+                onHashtag={(tag: string) => { window.location.assign(`/?tag=${encodeURIComponent(tag)}`); }}
               />
               </div>
             ))}

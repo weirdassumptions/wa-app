@@ -10,6 +10,7 @@ import {
   OFFICIAL_LOGO, OFFICIAL_USERNAME, AVATAR_COLORS, avatarGrad, initial,
   type Profile, type Comment,
 } from "./components/tweet-card";
+import { getChallengeOfDay, encodeChallengePostText, parseChallengePostText } from "./components/helpers";
 import { CharRing } from "./components/CharRing";
 
 /* ════════════════════════════════════════════ */
@@ -20,6 +21,7 @@ export default function Home() {
   const [profile, setProfile]                   = useState<Profile | null>(null);
   const [isAdmin, setIsAdmin]                   = useState(false);
   const [text, setText]                         = useState("");
+  const [challengeMode, setChallengeMode]       = useState(false);
   const [isPosting, setIsPosting]               = useState(false);
   const [modal, setModal]                       = useState<"none"|"auth"|"profile">("none");
   const [authTab, setAuthTab]                   = useState<"login"|"register">("login");
@@ -52,8 +54,24 @@ export default function Home() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [watching, setWatching] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<"home"|"osservati">("home");
+  const [activeTab, setActiveTab] = useState<"home"|"osservati"|"challenge">("home");
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const defaultChallenge = useMemo(() => getChallengeOfDay(), []);
+  const [challengeTopicOverride, setChallengeTopicOverride] = useState<string | null>(null);
+  const [editingChallenge, setEditingChallenge] = useState(false);
+  const [editChallengeTopic, setEditChallengeTopic] = useState("");
+  const challengeOfDay = useMemo(() => ({ date: defaultChallenge.date, topic: challengeTopicOverride ?? defaultChallenge.topic }), [defaultChallenge.date, defaultChallenge.topic, challengeTopicOverride]);
+  const isWaAdmin = profile?.username === OFFICIAL_USERNAME;
+
+  /* ── anon: non può avere tab Osservati ── */
+  useEffect(() => { if (!user && activeTab === "osservati") setActiveTab("home"); }, [user, activeTab]);
+
+  /* ── fetch challenge del giorno (override da DB per admin) ── */
+  useEffect(() => {
+    supabase.from("daily_challenges").select("topic").eq("date", defaultChallenge.date).maybeSingle()
+      .then(({ data }) => { if (data?.topic) setChallengeTopicOverride(data.topic); });
+  }, [defaultChallenge.date]);
 
   const navigateToPost = (id: string) => {
     const el = document.getElementById(`post-${id}`);
@@ -348,8 +366,12 @@ export default function Home() {
     const poster = profile ? (isOfficial(profile.username) ? OFFICIAL_USERNAME : profile.username) : "anonimo";
     const dname  = profile ? displayFor(profile.username, profile.display_name) : "Anonimo";
 
+    const finalText = challengeMode
+      ? encodeChallengePostText(challengeOfDay.date, challengeOfDay.topic, text.trim())
+      : text;
+
     const { data, error } = await supabase.from("assumptions").insert([{
-      text, username: poster, display_name: dname,
+      text: finalText, username: poster, display_name: dname,
       avatar_color: profile?.avatar_color ?? null,
       avatar_url:   profile?.avatar_url   ?? null,
     }]).select().single();
@@ -367,6 +389,7 @@ export default function Home() {
       }, ...prev]);
     }
     setText("");
+    setChallengeMode(false);
     setIsPosting(false);
     if (taRef.current) { taRef.current.style.height = "auto"; }
   };
@@ -456,13 +479,15 @@ export default function Home() {
 
   const toggleWatch = async (username: string) => {
     if (!user) return;
-    const isWatching = watching.includes(username);
-    if (isWatching) {
-      await supabase.from("watching").delete().eq("watcher_id", user.id).eq("watched_username", username);
-      setWatching(w => w.filter(u => u !== username));
+    const wasWatching = watching.includes(username);
+    // Ottimistico
+    setWatching(w => wasWatching ? w.filter(u => u !== username) : (w.includes(username) ? w : [...w, username]));
+    if (wasWatching) {
+      const { error } = await supabase.from("watching").delete().eq("watcher_id", user.id).eq("watched_username", username);
+      if (error) { console.error("unwatch error:", error); setWatching(w => (w.includes(username) ? w : [...w, username])); }
     } else {
-      await supabase.from("watching").insert({ watcher_id: user.id, watched_username: username });
-      setWatching(w => [...w, username]);
+      const { error } = await supabase.from("watching").insert({ watcher_id: user.id, watched_username: username });
+      if (error) { console.error("watch error:", error); setWatching(w => w.filter(u => u !== username)); }
     }
   };
 
@@ -513,7 +538,7 @@ export default function Home() {
                       <button onClick={e => { e.stopPropagation(); toggleWatch(u.username); }}
                         style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "2px 6px", borderRadius: 6, color: watching.includes(u.username) ? "var(--red)" : "var(--muted)" }}
                         title={watching.includes(u.username) ? "Smetti di osservare" : "Osserva"}
-                      >{watching.includes(u.username) ? "👁" : "👁‍🗨"}</button>
+                      >{watching.includes(u.username) ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{opacity:0.4}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}</button>
                     )}
                   </div>
                 ))}
@@ -660,10 +685,81 @@ export default function Home() {
                   <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontWeight: 600, fontSize: 13, fontFamily: "inherit", padding: 0 }} onClick={() => openAuth("register")}>Crea un account</button>{" "}per apparire nel podio
                 </div>
               )}
+              {/* Challenge (sobrio) */}
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+                {!editingChallenge ? (
+                  <>
+                    Challenge: <span style={{ color: "var(--text)" }}>{challengeOfDay.topic}</span>
+                    {" · "}
+                    <button
+                      type="button"
+                      onClick={() => setChallengeMode(v => !v)}
+                      style={{
+                        background: "none", border: "none", padding: 0, fontFamily: "inherit", cursor: "pointer",
+                        color: challengeMode ? "var(--red)" : "var(--muted)",
+                        fontWeight: challengeMode ? 600 : 400,
+                        fontSize: 12,
+                        textDecoration: "underline",
+                      }}
+                    >
+                      {challengeMode ? "in risposta alla challenge" : "rispondi"}
+                    </button>
+                    {isWaAdmin && (
+                      <>
+                        {" · "}
+                        <button
+                          type="button"
+                          onClick={() => { setEditingChallenge(true); setEditChallengeTopic(challengeOfDay.topic); }}
+                          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", cursor: "pointer", color: "var(--muted)", fontSize: 12, textDecoration: "underline" }}
+                        >
+                          modifica
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                    <input
+                      value={editChallengeTopic}
+                      onChange={e => setEditChallengeTopic(e.target.value)}
+                      placeholder="Topic challenge del giorno"
+                      style={{
+                        flex: 1, minWidth: 180, maxWidth: 400,
+                        background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 8,
+                        padding: "6px 10px", fontSize: 12, color: "var(--text)", fontFamily: "inherit",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const topic = editChallengeTopic.trim();
+                        if (!topic) return;
+                        await supabase.from("daily_challenges").upsert({ date: challengeOfDay.date, topic }, { onConflict: "date" });
+                        setChallengeTopicOverride(topic);
+                        setEditingChallenge(false);
+                      }}
+                      style={{ background: "var(--red)", border: "none", borderRadius: 999, color: "#fff", fontSize: 12, fontWeight: 600, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      Salva
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingChallenge(false); setEditChallengeTopic(""); }}
+                      style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                )}
+              </div>
               <textarea
                 ref={taRef}
                 className="compose-ta"
-                placeholder={isOfficial(profile?.username ?? "") ? "Scrivi un post ufficiale…" : waPlaceholder}
+                placeholder={
+                  isOfficial(profile?.username ?? "")
+                    ? "Scrivi un post ufficiale…"
+                    : (challengeMode ? "Rispondi alla challenge di oggi…" : waPlaceholder)
+                }
                 value={text}
                 onChange={e => {
                   setText(e.target.value.slice(0, 280));
@@ -692,22 +788,20 @@ export default function Home() {
           {/* PODIO MOBILE */}
           {assumptions.length > 0 && <Podium assumptions={assumptions} onPostClick={navigateToPost} />}
 
-          {/* Tab Home / Osservati */}
-          {user && (
-            <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border2)", background: "var(--surface)" }}>
-              {(["home", "osservati"] as const).map(tab => (
-                <button key={tab} onClick={() => setActiveTab(tab)} style={{
-                  flex: 1, background: "none", border: "none", cursor: "pointer",
-                  padding: "12px 0", fontSize: 14, fontWeight: activeTab === tab ? 700 : 400,
-                  color: activeTab === tab ? "var(--text)" : "var(--muted)",
-                  borderBottom: activeTab === tab ? "2px solid var(--red)" : "2px solid transparent",
-                  fontFamily: "inherit", transition: "color 0.15s",
-                }}>
-                  {tab === "home" ? "Home" : "👁 Osservati"}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Tab Home / Osservati (solo se loggato) / Challenge (visibile a tutti) */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border2)", background: "var(--surface)" }}>
+            {(user ? (["home", "osservati", "challenge"] as const) : (["home", "challenge"] as const)).map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                flex: 1, background: "none", border: "none", cursor: "pointer",
+                padding: "12px 0", fontSize: 14, fontWeight: activeTab === tab ? 700 : 400,
+                color: activeTab === tab ? "var(--text)" : "var(--muted)",
+                borderBottom: activeTab === tab ? "2px solid var(--red)" : "2px solid transparent",
+                fontFamily: "inherit", transition: "color 0.15s",
+              }}>
+                {tab === "home" ? "Home" : tab === "osservati" ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:5,verticalAlign:"middle"}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Osservati</> : "Challenge"}
+              </button>
+            ))}
+          </div>
 
           {/* HASHTAG FILTER BANNER */}
           {activeHashtag && (
@@ -729,16 +823,24 @@ export default function Home() {
           )}
 
           {/* FEED */}
-          {assumptions.length === 0 ? (
-            <div className="empty">
-              <div className="empty-icon">{activeTab === "osservati" ? "👁" : "👀"}</div>
-              <div className="empty-title">{activeTab === "osservati" ? "Nessun osservato ancora" : "Nessuna WA ancora"}</div>
-              <div>{activeTab === "osservati" ? "Vai sul profilo di un utente e inizia a osservarlo." : "Sii il primo a rompere il ghiaccio."}</div>
-            </div>
-          ) : assumptions
-            .filter(a => activeTab === "osservati" ? watching.includes(a.username) : true)
-            .filter(a => !activeHashtag || a.text.toLowerCase().includes(activeHashtag))
-            .flatMap((a, i) => {
+          {(() => {
+            const filtered = assumptions
+              .filter(a => activeTab === "osservati" ? watching.includes(a.username) : activeTab === "challenge" ? parseChallengePostText(a.text) !== null : true)
+              .filter(a => !activeHashtag || a.text.toLowerCase().includes(activeHashtag));
+            if (filtered.length === 0) {
+              return (
+                <div className="empty">
+                  <div className="empty-icon">{activeTab === "osservati" ? "○" : activeTab === "challenge" ? "🎯" : "👀"}</div>
+                  <div className="empty-title">
+                    {activeTab === "osservati" ? "Nessun osservato ancora" : activeTab === "challenge" ? "Nessuna risposta alla challenge" : "Nessuna WA ancora"}
+                  </div>
+                  <div>
+                    {activeTab === "osservati" ? "Vai sul profilo di un utente e inizia a osservarlo." : activeTab === "challenge" ? "Rispondi alla challenge di oggi dalla zona in alto." : "Sii il primo a rompere il ghiaccio."}
+                  </div>
+                </div>
+              );
+            }
+            return filtered.flatMap((a, i) => {
               const card = (
                 <div key={a.id} id={`post-${a.id}`}>
 
@@ -757,12 +859,12 @@ export default function Home() {
                 />
                 </div>
               );
-              if (i === 3 && !activeHashtag && isMobile && activeTab !== "osservati") {
+              if (i === 3 && !activeHashtag && isMobile && activeTab !== "osservati" && activeTab !== "challenge") {
                 return [card, <TrendingHashtagsMobile key="trending-mobile" assumptions={assumptions} onHashtag={tag => setActiveHashtag(t => t === tag ? null : tag)} activeHashtag={activeHashtag} />];
               }
               return [card];
-            })
-          }
+            });
+          })()}
 
           {/* Scroll to top */}
           {showScrollTop && (

@@ -46,6 +46,69 @@ export type Assumption = {
   edited?: boolean;
 };
 
+/* ─── Challenge of the Day (stored as marker inside text) ─── */
+export type ChallengeMeta = {
+  date: string; // YYYY-MM-DD
+  topic: string;
+  body: string;
+  marker: string; // full marker prefix (including trailing newline)
+};
+
+const CHALLENGE_TOPICS = [
+  "Racconta una cosa che hai cambiato idea recentemente (e perché).",
+  "Descrivi una paura irrazionale che hai avuto da piccolo.",
+  "Qual è una regola non scritta che vorresti fosse ufficiale?",
+  "Confessa un'abitudine strana che ti rende felice.",
+  "Qual è la tua opinione impopolare più innocua?",
+  "Racconta un momento in cui ti sei sentito fuori posto (ma poi è andata bene).",
+  "Qual è una piccola cosa che ti fa arrabbiare più del dovuto?",
+  "Se potessi fare una domanda a te stesso tra 10 anni, quale sarebbe?",
+  "Qual è una bugia bianca che dici spesso?",
+  "Racconta un complimento che ti è rimasto impresso.",
+];
+
+const ymdLocal = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+// deterministic but simple index
+const hashDate = (ymd: string) => {
+  let h = 0;
+  for (let i = 0; i < ymd.length; i++) h = (h * 31 + ymd.charCodeAt(i)) >>> 0;
+  return h;
+};
+
+export const getChallengeOfDay = (d: Date = new Date()) => {
+  const date = ymdLocal(d);
+  const topic = CHALLENGE_TOPICS[hashDate(date) % CHALLENGE_TOPICS.length];
+  return { date, topic };
+};
+
+export const encodeChallengePostText = (date: string, topic: string, body: string) => {
+  const safeTopic = encodeURIComponent(topic);
+  const marker = `[[challenge:${date}|${safeTopic}]]\n`;
+  return marker + body;
+};
+
+export const parseChallengePostText = (text: string): ChallengeMeta | null => {
+  if (!text.startsWith("[[challenge:")) return null;
+  const end = text.indexOf("]]\n");
+  if (end < 0) return null;
+  const header = text.slice(0, end + 2); // include final ]]
+  // header looks like [[challenge:YYYY-MM-DD|topic]]
+  const inner = header.slice("[[challenge:".length, -2);
+  const [date, encTopic = ""] = inner.split("|");
+  if (!date) return null;
+  let topic = "";
+  try { topic = decodeURIComponent(encTopic); } catch { topic = encTopic; }
+  const marker = header + "\n";
+  const body = text.slice(marker.length);
+  return { date, topic, body, marker };
+};
+
 /* ─── Gradient helpers ─── */
 const GRADS = [
   ["#b83232","#d4603a"],["#7a6a5a","#a08870"],["#4a7a6a","#6a9e8a"],
