@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AuthErrorHandler } from "./components/AuthErrorHandler";
 
 export const dynamic = "force-dynamic";
 
@@ -214,6 +215,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="it">
       <body>
         <GlobalStyles />
+        <AuthErrorHandler />
         {children}
         <footer className="site-footer">
           <Link href="/privacy">Privacy</Link>
