@@ -431,7 +431,7 @@ export default function Home() {
   };
 
   /* ── register ── */
-  const RESERVED_USERNAMES = ["privacy", "termini", "app", "crea-prova", "segnalazioni"];
+  const RESERVED_USERNAMES = ["privacy", "termini", "app", "crea-prova", "segnalazioni", "random"];
   const handleRegister = async () => {
     const usernameLower = regUsername.trim().toLowerCase().replace(/\s+/g, "_");
     if (!usernameLower) { setAuthErr("Scegli un username."); return; }
@@ -925,6 +925,10 @@ export default function Home() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             Home
           </Link>
+          <Link href="/random" className="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></svg>
+            Random
+          </Link>
           {profile && (
             <Link href={`/${profile.username}`} className="nav-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1030,6 +1034,9 @@ export default function Home() {
                 : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               }
             </button>
+            <Link href="/random" style={{ display: "flex", alignItems: "center", padding: 6, color: "var(--muted)", borderRadius: 8, transition: "background 0.15s" }} title="Random">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></svg>
+            </Link>
             {user && profile ? (
               <>
                 <button onClick={() => setMenuOpen(m => !m)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: "50%", display: "flex" }}>
@@ -1037,6 +1044,10 @@ export default function Home() {
                 </button>
                 {menuOpen && (
                   <div className="mob-menu" onClick={() => setMenuOpen(false)}>
+                    <Link href="/random" className="mob-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></svg>
+                      Random
+                    </Link>
                     <Link href={`/${profile.username}`} className="mob-menu-item">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                       Profilo

@@ -45,7 +45,7 @@ export default function CreaProvaPage() {
     const usernameLower = username.trim().toLowerCase().replace(/\s+/g, "_");
     if (!usernameLower) { setErr("Username obbligatorio."); return; }
     if (!password) { setErr("Password obbligatoria."); return; }
-    const RESERVED_USERNAMES = ["privacy", "termini", "app", "crea-prova", "segnalazioni"];
+    const RESERVED_USERNAMES = ["privacy", "termini", "app", "crea-prova", "segnalazioni", "random"];
     if (RESERVED_USERNAMES.includes(usernameLower)) {
       setErr("Questo username è riservato (conflitto con le pagine del sito).");
       return;
