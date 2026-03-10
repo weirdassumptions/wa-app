@@ -5,8 +5,8 @@ import { parseChallengePostText, isAnon } from "./helpers";
 
 const SITE_URL = "weirdassumptions.com";
 
-/** Max characters for quote to avoid overflow in social images */
-const MAX_QUOTE_CHARS = 280;
+/** Max characters for quote to avoid overflow su mobile e export */
+const MAX_QUOTE_CHARS = 200;
 
 /** Converte UUID in numero breve memorizzabile (es. 142) */
 export function uuidToShortNumber(id: string): number {
@@ -48,6 +48,7 @@ export function ShareCard({
       style={{
         width: "100%",
         maxWidth: isSquare ? 540 : 560,
+        minWidth: 0,
         aspectRatio: isSquare ? "1" : aspectRatio === "poster" ? "4/3" : "1200/630",
         background: "#faf6ef",
         border: "2px solid #d8d0c2",
@@ -70,7 +71,7 @@ export function ShareCard({
           justifyContent: "center",
           flex: 1,
           width: "100%",
-          maxWidth: 900,
+          minWidth: 0,
         }}
       >
         {/* Header: etichetta, non titolo */}
@@ -92,14 +93,18 @@ export function ShareCard({
         <blockquote
           style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: isSquare ? 36 : 30,
+            fontSize: isSquare ? 32 : 28,
             lineHeight: 1.45,
             color: "#1a1510",
             fontWeight: 400,
             margin: "0 auto",
             padding: "0 12px",
+            width: "100%",
             maxWidth: 540,
+            minWidth: 0,
             whiteSpace: "pre-wrap",
+            overflowWrap: "break-word",
+            wordBreak: "break-word",
             fontStyle: "italic",
             textAlign: "center",
             flex: 1,
@@ -108,7 +113,7 @@ export function ShareCard({
             justifyContent: "center",
           }}
         >
-          "{displayText}"
+          <span style={{ width: "100%", overflowWrap: "break-word", wordBreak: "break-word" }}>"{displayText}"</span>
         </blockquote>
 
         {/* Attribution: — @username */}
