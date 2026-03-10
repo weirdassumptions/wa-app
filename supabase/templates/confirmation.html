@@ -1,0 +1,24 @@
+<!--
+  Template email "Confirm signup" in stile WA.
+  Uso: Supabase Dashboard → Authentication → Email Templates → Confirm signup.
+  Incolla il corpo sotto nel campo Message (HTML).
+  Subject consigliato: "Conferma la tua email — Weird Assumptions"
+  Variabili: {{ .ConfirmationURL }} {{ .Data.display_name }} {{ .Data.username }} {{ .Email }}
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conferma la tua email</title>
+</head>
+<body style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #333; max-width: 480px; margin: 0 auto; padding: 24px;">
+  <p style="font-size: 16px; margin-bottom: 16px;">Ciao {{ or .Data.display_name .Data.username }},</p>
+  <p style="font-size: 15px; margin-bottom: 20px;">Quasi fatto: clicca sotto per confermare la tua email e attivare l'account su Weird Assumptions.</p>
+  <p style="margin: 24px 0;">
+    <a href="{{ .ConfirmationURL }}" style="display: inline-block; background: #b83232; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 999px; font-weight: 600; font-size: 15px;">Conferma la mia email</a>
+  </p>
+  <p style="font-size: 13px; color: #666;">Se non ti sei registrato tu, ignora pure questa email.</p>
+  <p style="font-size: 13px; color: #999; margin-top: 32px;">— Weird Assumptions</p>
+</body>
+</html>

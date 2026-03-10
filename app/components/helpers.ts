@@ -13,8 +13,11 @@ export type Profile = {
   bio: string;
   avatar_color: string;
   avatar_url?: string;
+  banner_url?: string;
   is_admin?: boolean;
   is_verified?: boolean;
+  weeks_won_count?: number;
+  challenges_won_count?: number;
 };
 
 export type Comment = {
@@ -29,6 +32,8 @@ export type Comment = {
   avatar_url?: string;
   avatar_color?: string;
   edited?: boolean;
+  likes?: number;
+  alreadyLiked?: boolean;
 };
 
 export type Assumption = {
@@ -63,6 +68,20 @@ const ymdLocal = (d: Date) => {
 
 /** Solo la data di oggi per la challenge (topic viene da DB/admin). */
 export const getChallengeOfDay = (d: Date = new Date()) => ({ date: ymdLocal(d) });
+
+/** Data di ieri in YYYY-MM-DD (ora locale). */
+export const getYesterdayDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return ymdLocal(d);
+};
+
+/** Formatta YYYY-MM-DD in "domenica 6 marzo" (locale it). */
+export const formatChallengeDate = (ymd: string) => {
+  const [y, m, day] = ymd.split("-").map(Number);
+  const d = new Date(y, m - 1, day);
+  return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+};
 
 export const encodeChallengePostText = (date: string, topic: string, body: string) => {
   const safeTopic = encodeURIComponent(topic);
@@ -100,6 +119,9 @@ export const avatarGrad = (n: string) => {
 export const initial = (n: string) => n.charAt(0).toUpperCase();
 
 export const isOfficial = (u: string) => u === OFFICIAL_USERNAME;
+
+/** Username anonimo (solo "anonimo" o "anonimo_XXXXX" per post anonimi con codice). */
+export const isAnon = (u: string) => !u || u === "anonimo" || u.startsWith("anonimo_");
 
 export const displayFor = (username: string, display_name?: string) =>
   isOfficial(username) ? OFFICIAL_NAME : (display_name || username);

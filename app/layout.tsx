@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -58,8 +59,8 @@ function GlobalStyles() {
         /* ── feed wrap ── */
         .wrap{min-height:100vh;background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border);}
 
-        /* ── mobile header ── */
-        .x-header{position:sticky;top:0;z-index:50;background:rgba(253,250,245,0.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 14px;height:56px;display:flex;align-items:center;gap:8px;}
+        /* ── mobile header (fisso in alto) ── */
+        .x-header{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(253,250,245,0.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 14px;height:56px;display:flex;align-items:center;gap:8px;}
         .header-logo{cursor:pointer;border-radius:8px;object-fit:cover;user-select:none;border:1.5px solid var(--border);flex-shrink:0;transition:opacity 0.15s,border-color 0.15s;}
         .header-logo:hover{opacity:0.75;border-color:var(--red);}
         .header-title{font-family:'Playfair Display',serif;font-weight:700;font-size:17px;line-height:1.1;letter-spacing:-0.01em;}
@@ -79,13 +80,15 @@ function GlobalStyles() {
         [data-theme="dark"] .mob-menu{background:var(--surface);}
 
         /* ── responsive ── */
-        @media(max-width:900px){.page-layout{grid-template-columns:1fr;}.sidebar{display:none;}.right-col{display:none;}.mobile-only{display:flex !important;}}
+        @media(max-width:900px){.page-layout{grid-template-columns:1fr;}.sidebar{display:none;}.right-col{display:none;}.mobile-only{display:flex !important;}.wrap{padding-top:56px;}}
         @media(min-width:901px){.x-header{display:none;}}
         .av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0;}
         .compose{display:flex;gap:14px;padding:16px 20px 0;border-bottom:6px solid var(--bg2);background:var(--surface);}
         .compose-col{flex:1;min-width:0;}
         .compose-who{display:flex;align-items:center;gap:5px;padding:4px 0 10px;border-bottom:1px solid var(--border2);margin-bottom:10px;font-size:14px;font-weight:600;color:var(--text);}
-        .compose-anon{font-size:13px;color:var(--muted);font-style:italic;padding:4px 0 10px;border-bottom:1px solid var(--border2);margin-bottom:10px;}
+        .compose-anon{font-size:13px;color:var(--muted);padding:10px 14px;border-radius:12px;background:var(--bg2);border:1px solid var(--border2);margin-bottom:12px;line-height:1.5;}
+        .compose-anon-cta{display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;border:none;border-radius:999px;font-family:inherit;font-size:12px;font-weight:600;padding:6px 14px;cursor:pointer;margin-top:8px;transition:background 0.15s,transform 0.05s;}
+        .compose-anon-cta:hover{background:var(--red-h);transform:scale(1.02);}
         .compose-ta{width:100%;background:transparent;border:none;outline:none;color:var(--text);font-size:19px;font-family:'DM Sans',sans-serif;font-weight:300;line-height:1.5;resize:none;overflow:hidden;padding-bottom:12px;}
         .compose-ta::placeholder{color:var(--muted2);font-style:italic;}
         .compose-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 0 14px;border-top:1px solid var(--border2);}
@@ -197,6 +200,11 @@ function GlobalStyles() {
         .stat-l{font-size:13px;color:var(--muted);}
         .edit-profile-btn{margin-top:14px;background:none;border:1.5px solid var(--border);border-radius:999px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--text);padding:7px 20px;transition:border-color 0.15s,background 0.15s;}
         .edit-profile-btn:hover{border-color:var(--red);background:var(--red-pale);}
+        /* ── footer globale (in fondo alla pagina, non sticky) ── */
+        .site-footer{display:flex;align-items:center;justify-content:center;gap:12px;padding:12px 16px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;margin-top:auto;}
+        .site-footer a{color:var(--muted);text-decoration:none;transition:color 0.15s;}
+        .site-footer a:hover{color:var(--red);}
+        [data-theme="dark"] .site-footer{background:var(--bg);border-top-color:var(--border2);}
       `}</style>
   );
 }
@@ -207,6 +215,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <GlobalStyles />
         {children}
+        <footer className="site-footer">
+          <Link href="/privacy">Privacy</Link>
+          <span style={{ color: "var(--muted2)" }}>·</span>
+          <Link href="/termini">Termini</Link>
+        </footer>
       </body>
     </html>
   );

@@ -73,7 +73,7 @@ export function renderWithHashtagsAndMentions(
   });
 }
 
-import { Avatar, UAv, Badge } from "./Avatar";
+import { Avatar, UAv, Badge, ChallengeWinnerBadge, WeekWinnerBadge } from "./Avatar";
 import {
   displayFor, handleFor, fmt,
   OFFICIAL_USERNAME,
@@ -82,12 +82,14 @@ import {
   encodeChallengePostText,
   isSubsequence,
   sortUsersForMentions,
+  isAnon,
 } from "./helpers";
 
 export type { Profile, Comment, Assumption };
 export { displayFor, handleFor, fmt, OFFICIAL_USERNAME };
 export { Avatar, UAv, Badge };
-export { OFFICIAL_LOGO, OFFICIAL_NAME, OFFICIAL_HANDLE, AVATAR_COLORS, avatarGrad, initial, isOfficial, getChallengeOfDay, parseChallengePostText, encodeChallengePostText } from "./helpers";
+export { OFFICIAL_LOGO, OFFICIAL_NAME, OFFICIAL_HANDLE, AVATAR_COLORS, avatarGrad, initial, isOfficial, isAnon, getChallengeOfDay, parseChallengePostText, encodeChallengePostText } from "./helpers";
+export { ChallengeWinnerBadge, WeekWinnerBadge } from "./Avatar";
 
 /* ─── useTick: forza re-render ogni N ms per aggiornare timestamp relativi ─── */
 export function useTick(ms = 10_000) {
@@ -130,7 +132,7 @@ export function AddCommentBox({
     if (!mentionSuggestions.open) return [];
     const q = mentionSuggestions.query.toLowerCase();
     const filtered = allProfiles.filter(u => {
-      if (!u.username || u.username === "anonimo") return false;
+      if (!u.username || isAnon(u.username)) return false;
       if (!q) return true;
       const un = u.username.toLowerCase();
       const dn = (u.display_name ?? "").toLowerCase();
@@ -306,7 +308,7 @@ export function ReplyBox({
     if (!mentionSuggestions.open) return [];
     const q = mentionSuggestions.query.toLowerCase();
     const filtered = allProfiles.filter(u => {
-      if (!u.username || u.username === "anonimo") return false;
+      if (!u.username || isAnon(u.username)) return false;
       if (!q) return true;
       const un = u.username.toLowerCase();
       const dn = (u.display_name ?? "").toLowerCase();
@@ -455,14 +457,16 @@ export function ReplyBox({
 /* ─── Comment node (ricorsivo) ─── */
 export function CommentNode({
   comment: c, allComments, isAdmin, profile, assumptionId,
-  onDelete, onAdd, onEdit, depth, activeReply, setActiveReply,
+  onDelete, onAdd, onLikeComment, onEdit, onReport, depth, activeReply, setActiveReply,
   validUsernames, allProfiles = [], watching = [],
 }: {
   comment: Comment; allComments: Comment[]; isAdmin: boolean; profile: Profile | null;
   assumptionId: string;
   onDelete: (id: string) => void;
   onAdd: (aid: string, t: string, parentId: string | null) => void;
+  onLikeComment?: (id: string, alreadyLiked: boolean) => void;
   onEdit: (id: string, text: string) => void;
+  onReport?: (id: string) => void;
   depth: number;
   activeReply?: string | null;
   setActiveReply?: (v: string | null) => void;
@@ -475,12 +479,13 @@ export function CommentNode({
   const setReplying = (v: boolean) => setActiveReply?.(v ? c.id : null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(c.text);
+  const [reportSent, setReportSent] = useState(false);
   const children = allComments.filter(x => x.parent_id === c.id);
 
   return (
     <div className="comment-root" style={depth === 0 ? { marginTop: depth === 0 ? 4 : 0 } : {}}>
       <div className="comment-item">
-        {c.username !== "anonimo" ? (
+        {!isAnon(c.username) ? (
           <Link href={`/${c.username}`}>
             <UAv username={c.username} size={32} avatarUrl={c.avatar_url} avatarColor={c.avatar_color} />
           </Link>
@@ -489,7 +494,7 @@ export function CommentNode({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            {c.username !== "anonimo" ? (
+            {!isAnon(c.username) ? (
               <Link
                 href={`/${c.username}`}
                 style={{ fontWeight: 600, fontSize: 13, color: "var(--text)", textDecoration: "none" }}
@@ -537,9 +542,24 @@ export function CommentNode({
             </div>
           )}
 
-          <button className="c-reply-btn" onClick={() => setReplying(!replying)}>
-            {replying ? "Annulla" : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{marginRight:3,verticalAlign:"middle"}}><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>Rispondi</>}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 2 }}>
+            <button className="c-reply-btn" onClick={() => setReplying(!replying)}>
+              {replying ? "Annulla" : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{marginRight:3,verticalAlign:"middle"}}><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>Rispondi</>}
+            </button>
+            {onLikeComment && profile && (
+              <button
+                className={`act lk${c.alreadyLiked ? " on" : ""}`}
+                style={{ padding: "2px 6px", minWidth: "unset", fontSize: 11 }}
+                onClick={e => { e.stopPropagation(); onLikeComment(c.id, !!c.alreadyLiked); }}
+                title="Mi piace"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{ width: 14, height: 14 }}>
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                {(c.likes ?? 0) > 0 && <span>{c.likes}</span>}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Azioni autore commento */}
@@ -567,6 +587,24 @@ export function CommentNode({
               </svg>
             </button>
           </div>
+        )}
+
+        {/* Segnala commento (loggato e non autore) */}
+        {onReport && profile && profile.username !== c.username && (
+          <button
+            className="act"
+            style={{ alignSelf: "flex-start", padding: "2px 6px", minWidth: "unset", color: "var(--muted)", fontSize: 11 }}
+            onClick={() => {
+              if (reportSent) return;
+              if (window.confirm("Segnala questo commento? La segnalazione sarà esaminata dai moderatori.")) {
+                onReport(c.id);
+                setReportSent(true);
+              }
+            }}
+            title="Segnala contenuto"
+          >
+            {reportSent ? "Inviata" : "Segnala"}
+          </button>
         )}
 
         {/* Azioni admin (su commenti altrui) */}
@@ -615,7 +653,9 @@ export function CommentNode({
               assumptionId={assumptionId}
               onDelete={onDelete}
               onAdd={onAdd}
+              onLikeComment={onLikeComment}
               onEdit={onEdit}
+              onReport={onReport}
               depth={depth + 1}
               activeReply={activeReply}
               setActiveReply={setActiveReply}
@@ -633,9 +673,11 @@ export function CommentNode({
 /* ─── Tweet card ─── */
 export const TweetCard = memo(function TweetCard({
   a, comments, isAdmin, profile, onLike, onDelete, onPin,
-  onDeleteComment, onAddComment, onEditPost, onEditComment,
+  onDeleteComment, onAddComment, onLikeComment, onEditPost, onEditComment,
+  onReportPost, onReportComment,
   currentUsername = "", openCommentId, setOpenCommentId, onHashtag,
   watching = [], onToggleWatch, validUsernames, allProfiles = [],
+  challengeWinnerUsername, previousWeekWinnerUsername,
 }: {
   a: Assumption;
   comments: Comment[];
@@ -646,8 +688,11 @@ export const TweetCard = memo(function TweetCard({
   onPin: (id: string, pinned: boolean) => void;
   onDeleteComment: (id: string) => void;
   onAddComment: (aid: string, t: string, pid: string | null) => void;
+  onLikeComment?: (id: string, alreadyLiked: boolean) => void;
   onEditPost: (id: string, text: string) => void;
   onEditComment: (id: string, text: string) => void;
+  onReportPost?: (id: string) => void;
+  onReportComment?: (id: string) => void;
   currentUsername?: string;
   openCommentId?: string | null;
   setOpenCommentId?: (id: string | null) => void;
@@ -656,6 +701,10 @@ export const TweetCard = memo(function TweetCard({
   onToggleWatch?: (username: string) => void;
   validUsernames?: Set<string>;
   allProfiles?: ProfileForMention[];
+  /** Username del vincitore della challenge di ieri (badge visibile per un giorno) */
+  challengeWinnerUsername?: string | null;
+  /** Username dell'utente con più like nella settimana precedente */
+  previousWeekWinnerUsername?: string | null;
 }) {
   useTick();
   const challenge = useMemo(() => parseChallengePostText(a.text), [a.text]);
@@ -663,6 +712,7 @@ export const TweetCard = memo(function TweetCard({
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(() => displayText);
   const [activeReply, setActiveReply] = useState<string | null>(null);
+  const [reportSent, setReportSent] = useState<"post" | "comment" | null>(null);
   const open = openCommentId === a.id;
   const setOpen = (v: boolean) => { setOpenCommentId?.(v ? a.id : null); if (!v) setActiveReply(null); };
 
@@ -700,7 +750,7 @@ export const TweetCard = memo(function TweetCard({
       <div className="tweet-row" onClick={() => { setOpen(!open); if (open) setActiveReply(null); }}>
         {/* Avatar + thread line */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          {a.username !== "anonimo" && a.username !== currentUsername ? (
+          {!isAnon(a.username) && a.username !== currentUsername ? (
             <Link href={`/${a.username}`} onClick={e => e.stopPropagation()}>
               <UAv username={a.username} size={42} avatarUrl={a.avatar_url} avatarColor={a.avatar_color} />
             </Link>
@@ -715,7 +765,7 @@ export const TweetCard = memo(function TweetCard({
           <div className="tweet-meta">
             <div style={{ display: "flex", flexDirection: "column", gap: 1, flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                {a.username !== "anonimo" && a.username !== currentUsername ? (
+                {!isAnon(a.username) && a.username !== currentUsername ? (
                   <Link
                     href={`/${a.username}`}
                     style={{ fontWeight: 600, fontSize: 14, color: "var(--text)", textDecoration: "none" }}
@@ -731,7 +781,9 @@ export const TweetCard = memo(function TweetCard({
                   </span>
                 )}
                 {a.is_verified && <Badge size={15} />}
-                {onToggleWatch && a.username !== "anonimo" && a.username !== currentUsername && (
+                {challengeWinnerUsername && a.username === challengeWinnerUsername && <ChallengeWinnerBadge size={15} />}
+                {previousWeekWinnerUsername && a.username === previousWeekWinnerUsername && <WeekWinnerBadge size={15} />}
+                {onToggleWatch && !isAnon(a.username) && a.username !== currentUsername && (
                   <button
                     onClick={e => { e.stopPropagation(); onToggleWatch(a.username); }}
                     title={watching.includes(a.username) ? "Smetti di osservare" : "Osserva"}
@@ -788,14 +840,27 @@ export const TweetCard = memo(function TweetCard({
             </div>
           ) : (
             <div className="tweet-body">
-              {challenge && (
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
-                  Challenge: <span style={{ color: "var(--text)" }}>{challenge.topic}</span>
+              {challenge ? (
+                <div style={{
+                  background: "var(--bg2)",
+                  border: "1px solid var(--border2)",
+                  borderLeft: "3px solid var(--red)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: "var(--red)", textTransform: "uppercase" }}>Challenge</span>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", lineHeight: 1.4 }}>{challenge.topic}</span>
+                  </div>
+                  <div style={{ fontSize: "inherit", lineHeight: "inherit" }}>
+                    {renderWithHashtagsAndMentions(displayText, onHashtag)}
+                  </div>
                 </div>
+              ) : (
+                <>
+                  {renderWithHashtagsAndMentions(displayText, onHashtag)}
+                </>
               )}
-              <div style={challenge ? { textDecoration: "underline", textDecorationColor: "rgba(212,90,74,0.75)", textUnderlineOffset: 4 } : undefined}>
-                {renderWithHashtagsAndMentions(displayText, onHashtag)}
-              </div>
               {a.edited && <span style={{ fontSize: 11, color: "var(--muted2)", marginLeft: 6, fontStyle: "italic" }}>· modificato</span>}
             </div>
           )}
@@ -843,6 +908,30 @@ export const TweetCard = memo(function TweetCard({
               </>
             )}
 
+            {/* Segnala (solo se loggato e non autore) */}
+            {onReportPost && profile && profile.username !== a.username && (
+              <button
+                className="act"
+                style={{ color: "var(--muted)" }}
+                onClick={e => {
+                  e.stopPropagation();
+                  if (reportSent === "post") return;
+                  if (window.confirm("Segnala questo post? La segnalazione sarà esaminata dai moderatori.")) {
+                    onReportPost(a.id);
+                    setReportSent("post");
+                  }
+                }}
+                title="Segnala contenuto"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                {reportSent === "post" && <span style={{ fontSize: 11 }}>Inviata</span>}
+              </button>
+            )}
+
             {/* Azioni admin */}
             {isAdmin && (
               <>
@@ -877,11 +966,13 @@ export const TweetCard = memo(function TweetCard({
               comment={c}
               allComments={comments}
               isAdmin={isAdmin}
+              onLikeComment={onLikeComment}
               profile={profile}
               assumptionId={a.id}
               onDelete={onDeleteComment}
               onAdd={onAddComment}
               onEdit={onEditComment}
+              onReport={onReportComment}
               depth={0}
               activeReply={activeReply}
               setActiveReply={setActiveReply}
